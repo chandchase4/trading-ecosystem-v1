@@ -6,6 +6,7 @@ import { snapshotScheduler } from './services/SnapshotScheduler.js'
 import { eventEngine } from './services/EventEngine.js'
 import { marketIngestion } from './services/MarketIngestion.js'
 import { scanners } from './services/scanners.js'
+import { coinbaseRestProvider } from './services/CoinbaseRestProvider.js'
 
 const port = Number(process.env.PORT) || 3001
 
@@ -15,6 +16,7 @@ try {
   marketDataHub.onMomentum = event => eventEngine.publish(event)
   marketIngestion.subscriptionsFor = symbol => scanners.registry.referencesFor(symbol)
   marketDataHub.onData = update => marketIngestion.receive(update)
+  coinbaseRestProvider.onData = update => marketIngestion.receive(update)
   snapshotScheduler.start()
   // Only Vite's local proxy and the local CLI should talk to this API.
   const server = createApp().listen(port, '127.0.0.1', () => {
