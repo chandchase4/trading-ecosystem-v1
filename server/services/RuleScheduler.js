@@ -20,7 +20,7 @@ export class RuleScheduler {
     for (const item of old) {
       const name = `snapshot-${item.name}`.slice(0, 40)
       const trigger = `schedule.${name}`
-      await this.rules.updateOne({ name }, { $setOnInsert: {
+      await this.rules.updateOne({ name, trigger }, { $setOnInsert: {
         name, trigger, enabled: item.enabled === true,
         intervalSeconds: item.intervalSeconds || 300,
         target: { scope: 'global', id: '' },
