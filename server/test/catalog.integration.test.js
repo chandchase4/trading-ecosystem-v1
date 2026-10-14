@@ -9,6 +9,7 @@ import { readWorkspaceState } from '../workspace.js'
 import { snapshotScheduler } from '../services/SnapshotScheduler.js'
 import { eventEngine } from '../services/EventEngine.js'
 import Process from '../models/Process.js'
+import { manage } from '../services/management.js'
 
 // Never run integration tests against a real user's Atlas database.
 const testUri = 'mongodb://127.0.0.1:27017/trading_ecosystem_ci'
@@ -121,6 +122,49 @@ test('MongoDB-backed catalog and scanner lifecycle', { skip: !enabled }, async (
       await snapshotScheduler.tick()
       assert.ok(eventEngine.snapshots.list().length > beforeCount)
       await Process.updateOne({ _id: snapshotProcess._id }, { $set: { enabled: false } })
+
+      // Real UI editing endpoints must persist changes, not merely change demo state.
+      assert.match((await manage({ action: 'asset.update', payload: {
+        symbol: 'BTC', name: 'Bitcoin updated', assetClass: 'crypto', note: 'From editor',
+      } })).message, /Saved BTC/)
+      assert.equal((await readWorkspaceState()).assetDetails.find(a => a.symbol === 'BTC').name, 'Bitcoin updated')
+      await manage({ action: 'market.add', payload: {
+        symbol: 'BTC', marketSymbol: 'BTC-EUR', provider: 'coinbase', exchange: 'coinbase', quote: 'EUR', activityRank: 3,
+      } })
+      assert.equal((await readWorkspaceState()).assetDetails.find(a => a.symbol === 'BTC').markets.length, 3)
+      await manage({ action: 'market.remove', payload: {
+        symbol: 'BTC', marketSymbol: 'BTC-EUR', provider: 'coinbase', exchange: 'coinbase',
+      } })
+      assert.equal((await readWorkspaceState()).assetDetails.find(a => a.symbol === 'BTC').markets.length, 2)
+      const m = (await readWorkspaceState()).memberships.find(i => i.asset === 'BTC' && i.collection === 'demo-usdt')
+      await manage({ action: 'membership.update', payload: {
+        id: m.id, provider: 'okx', exchange: 'okx', marketSymbol: 'BTC-USDT', priority: 95, notes: 'USDT preference',
+      } })
+      assert.equal((await readWorkspaceState()).memberships.find(i => i.id === m.id).preferences.priority, 95)
+      await manage({ action: 'rule.save', payload: {
+        name: 'ui-test-rule', trigger: 'asset.created', scope: 'global', targetId: '',
+        conditions: [{ path: 'data.symbol', operator: 'eq', value: 'BTC' }],
+        actions: [{ type: 'alert.record', config: { message: 'New asset' } }],
+        enabled: false,
+      } })
+      assert.ok((await readWorkspaceState()).eventRules.some(r => r.name === 'ui-test-rule'))
+      await manage({ action: 'rule.delete', payload: { name: 'ui-test-rule' } })
+      assert.ok(!(await readWorkspaceState()).eventRules.some(r => r.name === 'ui-test-rule'))
+      await manage({ action: 'process.create', payload: { name: 'ui-snapshot', kind: 'snapshot' } })
+      await manage({ action: 'process.update', payload: { name: 'ui-snapshot', enabled: true, intervalSeconds: 120 } })
+      assert.equal((await Process.findOne({ name: 'ui-snapshot' })).intervalSeconds, 120)
+      await manage({ action: 'process.update', payload: { name: 'ui-snapshot', enabled: false, intervalSeconds: 120 } })
+      await manage({ action: 'process.delete', payload: { name: 'ui-snapshot' } })
+      assert.equal(await Process.countDocuments({ name: 'ui-snapshot' }), 0)
+      await assert.rejects(manage({ action: 'rule.save', payload: {
+        name: 'evil-rule', trigger: 'asset.created', scope: 'global',
+        actions: [{ type: 'shell.exec', config: { command: 'rm -rf /' } }],
+      } }), /Unsupported event action/)
+      const retained = eventEngine.snapshots.list()[0]
+      await manage({ action: 'snapshot.pin', payload: { id: retained.id, pinned: true } })
+      assert.equal(eventEngine.snapshots.get(retained.id).pinned, true)
+      await manage({ action: 'snapshot.delete', payload: { id: retained.id } })
+      assert.equal(eventEngine.snapshots.get(retained.id), null)
     } finally {
       await new Promise(resolve => server.close(resolve))
     }
