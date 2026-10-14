@@ -2,11 +2,20 @@ import * as catalog from './services/catalog.js'
 import { pingDatabase } from './db.js'
 import { scanners } from './services/scanners.js'
 import { normalizeSymbol } from './lib/validation.js'
+import * as demo from './services/demo.js'
+import { marketDataHub } from './services/MarketDataHub.js'
+import { eventEngine } from './services/EventEngine.js'
 
 // One command interpreter shared by HTTP requests and CLI entry points.
 export const HELP = `Trading Ecosystem commands
 
   help                             Show commands
+  demo seed                        Add sample catalog, processes, event rule
+  demo trigger                     Simulate BTC +5% (never a real signal)
+  market list                      Show real Coinbase quotes / feed status
+  event recent                     Show recent runtime events
+  snapshot take                    Capture app market state in bounded RAM
+  snapshot list                    List temporary captures
   status                           Ping MongoDB
 
   asset add BTC, TSLA               Add one or more symbols
@@ -58,7 +67,7 @@ const lineList = (values, empty) => values.length
   ? values.map((value, i) => `${i + 1}. ${value}`).join('\n')
   : empty
 
-export async function execute(input, services = { catalog, pingDatabase, scanners }) {
+export async function execute(input, services = { catalog, pingDatabase, scanners, demo, marketDataHub, eventEngine }) {
   if (typeof input !== 'string' || input.length > 1000) throw new Error('Command must be text under 1000 characters.')
   const parts = input.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return success()
@@ -73,6 +82,36 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
 
   const c = services.catalog
   const s = services.scanners
+
+  if (verb === 'demo' && action === 'seed' && args.length === 0) {
+    const result = await services.demo.seedDemo()
+    return success(`Demo seeded: ${result.assets} catalog assets, ${result.collection}, ${result.scanner}, ${result.rules} event rule. Start the demo scanner for real supported crypto quotes.`)
+  }
+  if (verb === 'demo' && action === 'trigger' && args.length === 0) {
+    const result = await services.demo.triggerDemoEvent()
+    return success(`SIMULATED BTC +5.2% event: ${result.results.length} rule(s) matched; ${result.results.flatMap(rule => rule.actions.map(a => a.type)).join(', ') || 'no actions'}.`)
+  }
+  if (verb === 'market' && action === 'list' && args.length === 0) {
+    const state = services.marketDataHub.getState()
+    return success(`Coinbase feed: ${state.connection}; ${state.quotes.length} live quotes; ${state.observationCount} buffered observations.`,
+      ...(state.quotes.map(item => `${item.symbol} ${item.price} (${item.marketSymbol}) 5m window: ${item.changeWindowPct.toFixed(2)}% [${item.provider}]`)),
+      state.unsupported.length ? `Without live feed: ${state.unsupported.join(', ')}` : '')
+  }
+  if (verb === 'event' && action === 'recent' && args.length === 0) {
+    return success(...(services.eventEngine.getState().recentEvents.slice(0, 10).map(event => `${event.at}: ${event.type}`) || []))
+  }
+  if (verb === 'snapshot' && action === 'take' && args.length === 0) {
+    const capture = services.eventEngine.snapshots.capture({
+      type: 'app-market-data', source: { type: 'manual', id: 'cli' },
+      payload: { market: services.marketDataHub.getState(), scanners: await s.details() },
+    })
+    return success(`Temporary snapshot ${capture.id} captured (${capture.bytes} bytes). No database history was written.`)
+  }
+  if (verb === 'snapshot' && action === 'list' && args.length === 0) {
+    const snapshots = services.eventEngine.snapshots.list()
+    return success(...(snapshots.map(item => `${item.capturedAt} ${item.type} ${item.id} (${item.bytes} B)`) || []),
+      `Storage: ${services.eventEngine.snapshots.stats.totalBytes} / ${services.eventEngine.snapshots.stats.maxBytes} bytes`)
+  }
 
   if (verb === 'asset') {
     if (action === 'add') {

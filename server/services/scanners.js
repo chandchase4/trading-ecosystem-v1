@@ -5,6 +5,7 @@ import Membership from '../models/Membership.js'
 import Process from '../models/Process.js'
 import Subscription from '../models/Subscription.js'
 import { ScannerRegistry } from './ScannerRegistry.js'
+import { marketDataHub } from './MarketDataHub.js'
 
 class ScannerService {
   constructor() {
@@ -95,6 +96,7 @@ class ScannerService {
     await Subscription.deleteOne({ _id: subscription._id })
     this.registry.detach(String(subscription._id))
     this.activeProcesses.get(String(process._id))?.delete(String(subscription._id))
+    marketDataHub.sync([...this.registry.assets.keys()])
     return { name: process.name, collection: collection.name, detached: true }
   }
 
@@ -108,6 +110,7 @@ class ScannerService {
     if (!subscriptions) return false
     for (const id of subscriptions) this.registry.detach(id)
     this.activeProcesses.delete(key)
+    marketDataHub.sync([...this.registry.assets.keys()])
     return true
   }
 
@@ -140,6 +143,7 @@ class ScannerService {
     }
 
     this.activeProcesses.set(key, newIds)
+    marketDataHub.sync([...this.registry.assets.keys()])
     return {
       name: process.name,
       subscriptions: newIds.size,

@@ -1,6 +1,7 @@
 import 'dotenv/config'
 import { createApp } from './api.js'
 import { connectDatabase, disconnectDatabase } from './db.js'
+import { marketDataHub } from './services/MarketDataHub.js'
 
 const port = Number(process.env.PORT) || 3001
 
@@ -14,6 +15,7 @@ try {
 
   for (const signal of ['SIGINT', 'SIGTERM']) {
     process.once(signal, () => {
+      marketDataHub.stop()
       server.close(async () => {
         await disconnectDatabase()
         process.exit(0)
