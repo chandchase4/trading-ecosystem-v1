@@ -18,6 +18,7 @@ const ruleSchema = new mongoose.Schema({
     id: { type: String, default: '' },
   },
   trigger: { type: String, required: true, trim: true },
+  intervalSeconds: { type: Number, min: 5, max: 86400, default: 300 },
   conditions: { type: [conditionSchema], default: [] },
   actions: { type: [actionSchema], default: [] },
   enabled: { type: Boolean, default: false },
