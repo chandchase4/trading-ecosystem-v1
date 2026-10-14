@@ -1,0 +1,68 @@
+import { connectDatabase } from '../db.js'
+import Asset from '../models/Asset.js'
+import Provider from '../models/Provider.js'
+import Exchange from '../models/Exchange.js'
+import EventRule from '../models/EventRule.js'
+import Process from '../models/Process.js'
+import * as catalog from './catalog.js'
+import { scanners } from './scanners.js'
+import { eventEngine } from './EventEngine.js'
+
+// Explicit, idempotent seed. Never runs at server startup.
+// Sample metadata is illustrative, not verified market-provider discovery.
+const demoAssets = [
+  ['BTC', 'Bitcoin', 'crypto', 'BTC-USD', 'USD', 'coinbase', 'coinbase'],
+  ['ETH', 'Ethereum', 'crypto', 'ETH-USD', 'USD', 'coinbase', 'coinbase'],
+  ['SOL', 'Solana', 'crypto', 'SOL-USDT', 'USDT', 'okx', 'okx'],
+  ['TSLA', 'Tesla', 'stock', 'TSLA', 'USD', 'alpaca', 'nasdaq'],
+  ['NVDA', 'NVIDIA', 'stock', 'NVDA', 'USD', 'alpaca', 'nasdaq'],
+]
+export async function seedDemo() {
+  await connectDatabase()
+  for (const [symbol, name, assetClass, marketSymbol, quote, provider, exchange] of demoAssets) {
+    await catalog.addAsset(symbol)
+    await Asset.updateOne({ symbol }, { $set: {
+      name, assetClass,
+      markets: [{ symbol: marketSymbol, base: symbol, quote, provider, exchange, activityRank: 1, verified: false }],
+    } })
+  }
+  for (const provider of [
+    { slug: 'coinbase', name: 'Coinbase', assetClasses: ['crypto'], capabilities: ['websocket', 'ticker'], settings: { enabled: true, priority: 1 }, isDemo: true },
+    { slug: 'alpaca', name: 'Alpaca', assetClasses: ['stock'], capabilities: ['websocket', 'rest', 'iex'], settings: { enabled: false, priority: 2 }, isDemo: true },
+    { slug: 'okx', name: 'OKX', assetClasses: ['crypto'], capabilities: ['websocket', 'rest'], settings: { enabled: false, priority: 3 }, isDemo: true },
+  ]) await Provider.updateOne({ slug: provider.slug }, { $setOnInsert: provider }, { upsert: true })
+  for (const exchange of [
+    { slug: 'coinbase', name: 'Coinbase Exchange', assetClasses: ['crypto'], isDemo: true },
+    { slug: 'okx', name: 'OKX', assetClasses: ['crypto'], isDemo: true },
+    { slug: 'nasdaq', name: 'Nasdaq', assetClasses: ['stock'], timezone: 'America/New_York', isDemo: true },
+  ]) await Exchange.updateOne({ slug: exchange.slug }, { $setOnInsert: exchange }, { upsert: true })
+  await catalog.createCollection('demo-watchlist')
+  for (const [symbol] of demoAssets) await catalog.addMember('demo-watchlist', symbol)
+  await scanners.create('demo-momentum')
+  await scanners.attach('demo-momentum', 'demo-watchlist')
+  await Process.updateOne({ name: 'demo-momentum' }, { $set: { config: { session: 'extended', mode: 'manual' } } })
+  await Process.updateOne({ name: 'demo-discovery' },
+    { $setOnInsert: { name: 'demo-discovery', kind: 'discovery', enabled: false, intervalSeconds: 300, config: { throttled: true } } },
+    { upsert: true })
+  await Process.updateOne({ name: 'demo-snapshots' },
+    { $setOnInsert: { name: 'demo-snapshots', kind: 'snapshot', enabled: false, intervalSeconds: 300, config: { target: 'app.market-data', history: false } } },
+    { upsert: true })
+  await EventRule.updateOne({ name: 'demo-btc-5pct' }, { $setOnInsert: {
+    name: 'demo-btc-5pct', target: { scope: 'global' }, trigger: 'market.momentum.detected',
+    conditions: [{ path: 'data.symbol', operator: 'eq', value: 'BTC' }, { path: 'data.changePct', operator: 'gte', value: 5 }],
+    actions: [{ type: 'snapshot.capture', config: { type: 'market-event' } },
+      { type: 'alert.record', config: { message: 'BTC +5%: captured market snapshot' } }],
+    enabled: true, isDemo: true,
+  } }, { upsert: true })
+  eventEngine.invalidate()
+  return { assets: demoAssets.length, collection: 'demo-watchlist', scanner: 'demo-momentum', rules: 1 }
+}
+
+export async function triggerDemoEvent() {
+  // A simulated event for checking configured rules, NEVER a real market signal.
+  const event = { type: 'market.momentum.detected',
+    source: { scope: 'asset', id: 'BTC' },
+    data: { symbol: 'BTC', changePct: 5.2, interval: '5m' }, demo: true }
+  const results = await eventEngine.evaluate(event)
+  return { event, results }
+}
