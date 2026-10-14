@@ -48,9 +48,12 @@ export class DataManager {
       changePct: Number(changePct.toFixed(3)), spanSeconds, timestamp: new Date(time).toISOString() }
     this.quotes.set(symbol, quote)
     const consumerIds = [...(this.engine.symbolConsumers.get(symbol) || [])]
-    this.events.publish('market.data.received', quote, { scannerIds: consumerIds })
     this.engine.ingest(quote)
-    void this.registry.ensureFromData(quote).catch(error => { this.error = error.message })
+    // Keep provider callback fast, but guarantee the canonical Asset exists
+    // before an EventRule attempts collection.add on the first quote.
+    void Promise.resolve().then(() => this.registry.ensureFromData(quote))
+      .then(() => this.events.publish('market.data.received', quote, { scannerIds: consumerIds }))
+      .catch(error => { this.error = error.message })
     return true
   }
 
