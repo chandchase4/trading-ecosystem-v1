@@ -26,10 +26,16 @@ collection list
 collection add watchlist BTC
 collection show watchlist
 collection remove watchlist BTC
+scanner create momentum
+scanner attach momentum watchlist
+scanner start momentum
+scanner status momentum
+scanner sync momentum
+scanner stop momentum
 exit
 ```
 
-An asset must exist before adding it to a collection. Names are case-insensitive and use letters, digits, underscores or hyphens without spaces. Assets and collection memberships persist in MongoDB.
+An asset must exist before adding it to a collection. Names are case-insensitive and use letters, digits, underscores or hyphens without spaces. Assets, collections, scanner definitions, and scanner-to-collection attachments persist in MongoDB.\n\nScanner start/stop runs a **deduplicated asset registry in the current interactive CLI session only**. It does not fetch prices, place trades, or continue running after you exit. After changing collection members, use `scanner sync <name>` to refresh the registry. `scanner kill` currently behaves like `scanner stop`.
 
 Direct one-off commands also work: `npm run cli -- collection show watchlist`.
 
@@ -57,4 +63,4 @@ npm run dev
 
 React remains a bare placeholder. GitHub Pages hosts only the static frontend, not the Node.js server.
 
-No live scanning, market prices, orders, or subscriptions yet. See [architecture](docs/ARCHITECTURE.md).
+No live market-data scanning, orders, or scheduled polling yet. See [architecture](docs/ARCHITECTURE.md).

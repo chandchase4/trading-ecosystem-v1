@@ -7,7 +7,7 @@ Build a CLI-first market scanner with reusable backend services. Keep the initia
 - Node.js (ES modules) for CLI, commands, and scanner execution
 - Express server scaffold created; no routes yet
 - React + Vite minimal frontend in `client/`; frontend development is deferred
-- MongoDB + Mongoose connection scaffold in `server/`; no models yet
+- MongoDB + Mongoose persistence for assets, collections, memberships, scanner processes and collection subscriptions
 - Market data providers to be selected; no live market data exists yet
 
 ## Initial MVP
@@ -63,5 +63,13 @@ For the first CLI implementation, stop may simply pause a scanner until Discover
 - Use `README.md` for setup and `docs/ARCHITECTURE.md` for architecture and roadmap.
 - Never commit secrets or provider API keys.
 
+## Implemented so far
+- MongoDB-backed asset/collection/membership CLI commands
+- Saved scanner definitions and collection attachments
+- In-memory deduplicated registry, with start/stop/sync/status commands
+- Node unit tests and CI for registry, validation, and command routing
+
+The active registry is **not** a live scanner; no prices are fetched, no market rules are evaluated, and no background service runs after CLI exit. Updates to a collection require `scanner sync` to refresh an already-active registry.
+
 ## Next implementation step
-Implement a minimal CLI with MongoDB models for assets, collections, and memberships; then add a small ScannerManager. React remains deferred.
+Choose a market-data provider, then wire a minimal polling/evaluation loop into the scanner. Keep React deferred.

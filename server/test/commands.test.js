@@ -37,3 +37,25 @@ test('invalid argument counts fail explicitly', async () => {
 test('status pings MongoDB through the injected function', async () => {
   assert.deepEqual((await execute('status', services)).lines, ['MongoDB: connected'])
 })
+
+test('scanner commands dispatch to the service', async () => {
+  const mock = {
+    ...services,
+    scanners: {
+      create: async name => ({ name, created: true }),
+      list: async () => ['momentum'],
+      attach: async (name, collection) => ({ name, collection, attached: true }),
+      detach: async (name, collection) => ({ name, collection, detached: true }),
+      start: async name => ({ name, subscriptions: 1, symbols: ['BTC'] }),
+      sync: async name => ({ name, subscriptions: 1, symbols: ['BTC'] }),
+      stop: async name => ({ name, stopped: true }),
+      status: async name => ({ name, running: true, collections: ['watchlist'], symbols: ['BTC'], totalUniqueAssets: 1 }),
+    },
+  }
+  assert.deepEqual((await execute('scanner create momentum', mock)).lines, ['Created scanner momentum.'])
+  assert.match((await execute('scanner attach momentum watchlist', mock)).lines[0], /Attached watchlist/)
+  assert.match((await execute('scanner start momentum', mock)).lines[0], /No live price feed yet/)
+  assert.match((await execute('scanner status momentum', mock)).lines[0], /BTC/)
+  assert.match((await execute('scanner stop momentum', mock)).lines[0], /registry stopped/)
+  assert.match((await execute('scanner detach momentum watchlist', mock)).lines[0], /Detached watchlist/)
+})
