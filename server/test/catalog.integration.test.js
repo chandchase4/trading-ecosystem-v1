@@ -6,7 +6,8 @@ import { scanners } from '../services/scanners.js'
 import { createApp } from '../api.js'
 import { seedDemo, triggerDemoEvent } from '../services/demo.js'
 import { readWorkspaceState } from '../workspace.js'
-import { snapshotScheduler } from '../services/SnapshotScheduler.js'
+import { ruleScheduler } from '../services/RuleScheduler.js'
+import EventRule from '../models/EventRule.js'
 import { eventEngine } from '../services/EventEngine.js'
 import Process from '../models/Process.js'
 import { manage } from '../services/management.js'
@@ -108,20 +109,26 @@ test('MongoDB-backed catalog and scanner lifecycle', { skip: !enabled }, async (
       assert.equal(showcase.assetDetails.find(a => a.symbol === 'BTC').markets.length, 2)
       assert.ok(showcase.memberships.some(m =>
         m.asset === 'BTC' && m.collection === 'demo-usdt' && m.preferences.marketSymbol === 'BTC-USDT'))
-      assert.equal(showcase.eventRules.length, 2)
+      assert.equal(showcase.eventRules.length, 3)
       const simulated = await triggerDemoEvent()
       assert.equal(simulated.results.length, 1)
       assert.equal(simulated.results[0].actions.length, 2)
       assert.ok(eventEngine.snapshots.list().length >= 1)
 
-      // Snapshot process is disabled by default and stores captures only in RAM.
-      const snapshotProcess = await Process.findOne({ name: 'demo-snapshots' })
-      assert.equal(snapshotProcess.enabled, false)
-      await Process.updateOne({ _id: snapshotProcess._id }, { $set: { enabled: true } })
+      // Snapshot scheduling is a generic EventRule with snapshot.capture action.
+      const snapshotRule = await EventRule.findOne({ name: 'demo-snapshots' })
+      assert.equal(snapshotRule.enabled, false)
+      assert.equal(snapshotRule.trigger, 'schedule.demo-snapshots')
+      await EventRule.updateOne({ _id: snapshotRule._id }, { $set: { enabled: true } })
+      eventEngine.invalidate()
       const beforeCount = eventEngine.snapshots.list().length
-      await snapshotScheduler.tick()
+      const t = Date.now()
+      await ruleScheduler.tick(t)
+      await ruleScheduler.tick(t + 301_000)
+      await new Promise(resolve => setTimeout(resolve, 100))
       assert.ok(eventEngine.snapshots.list().length > beforeCount)
-      await Process.updateOne({ _id: snapshotProcess._id }, { $set: { enabled: false } })
+      await EventRule.updateOne({ _id: snapshotRule._id }, { $set: { enabled: false } })
+      eventEngine.invalidate()
 
       // Real UI editing endpoints must persist changes, not merely change demo state.
       assert.match((await manage({ action: 'asset.update', payload: {
@@ -150,12 +157,14 @@ test('MongoDB-backed catalog and scanner lifecycle', { skip: !enabled }, async (
       assert.ok((await readWorkspaceState()).eventRules.some(r => r.name === 'ui-test-rule'))
       await manage({ action: 'rule.delete', payload: { name: 'ui-test-rule' } })
       assert.ok(!(await readWorkspaceState()).eventRules.some(r => r.name === 'ui-test-rule'))
-      await manage({ action: 'process.create', payload: { name: 'ui-snapshot', kind: 'snapshot' } })
-      await manage({ action: 'process.update', payload: { name: 'ui-snapshot', enabled: true, intervalSeconds: 120 } })
-      assert.equal((await Process.findOne({ name: 'ui-snapshot' })).intervalSeconds, 120)
-      await manage({ action: 'process.update', payload: { name: 'ui-snapshot', enabled: false, intervalSeconds: 120 } })
-      await manage({ action: 'process.delete', payload: { name: 'ui-snapshot' } })
-      assert.equal(await Process.countDocuments({ name: 'ui-snapshot' }), 0)
+      await assert.rejects(manage({ action: 'process.create', payload: { name: 'ui-snapshot', kind: 'snapshot' } }), /Create scanners/)
+      await manage({ action: 'rule.save', payload: {
+        name: 'ui-snapshot', trigger: 'schedule.ui-snapshot', scope: 'global',
+        intervalSeconds: 120, conditions: [],
+        actions: [{ type: 'snapshot.capture', config: { type: 'scheduled' } }], enabled: false,
+      } })
+      assert.equal((await EventRule.findOne({ name: 'ui-snapshot' })).intervalSeconds, 120)
+      await manage({ action: 'rule.delete', payload: { name: 'ui-snapshot' } })
       await assert.rejects(manage({ action: 'rule.save', payload: {
         name: 'evil-rule', trigger: 'asset.created', scope: 'global',
         actions: [{ type: 'shell.exec', config: { command: 'rm -rf /' } }],
