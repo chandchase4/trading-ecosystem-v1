@@ -110,6 +110,23 @@ export async function manage({ action, payload } = {}) {
       eventEngine.publish({ type: 'membership.updated', source: { scope: 'membership', id: String(doc._id) }, data: { marketSymbol, priority: doc.preferences.priority } })
       return { message: 'Membership preferences saved. Live feed routing does not use overrides yet.' }
     }
+    case 'process.create': {
+      const name = normalizeName(payload.name)
+      const kind = payload.kind
+      if (!['snapshot','discovery'].includes(kind)) fail('Create scanners using scanner controls.')
+      if (await Process.exists({ name })) fail('A process with that name already exists.')
+      await Process.create({ name, kind, enabled: false, intervalSeconds: 300 })
+      return { message: `Created disabled ${kind} process ${name}. ${kind === 'discovery' ? 'Discovery execution is not available yet.' : 'Enable it after configuring the capture interval.'}` }
+    }
+    case 'process.delete': {
+      const name = normalizeName(payload.name)
+      const doc = await Process.findOne({ name })
+      if (!doc) fail('Process not found.')
+      if (doc.kind === 'scanner') fail('Use the scanner controls to delete scanner processes.')
+      if (doc.enabled) fail('Disable the process before deleting it.')
+      await Process.deleteOne({ _id: doc._id })
+      return { message: `Deleted ${name}.` }
+    }
     case 'process.update': {
       const name = normalizeName(payload.name)
       const doc = await Process.findOne({ name })
