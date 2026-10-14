@@ -4,6 +4,11 @@ import { connectDatabase, disconnectDatabase } from '../db.js'
 import * as catalog from '../services/catalog.js'
 import { scanners } from '../services/scanners.js'
 import { createApp } from '../api.js'
+import { seedDemo, triggerDemoEvent } from '../services/demo.js'
+import { readWorkspaceState } from '../workspace.js'
+import { snapshotScheduler } from '../services/SnapshotScheduler.js'
+import { eventEngine } from '../services/EventEngine.js'
+import Process from '../models/Process.js'
 
 // Never run integration tests against a real user's Atlas database.
 const testUri = 'mongodb://127.0.0.1:27017/trading_ecosystem_ci'
@@ -94,6 +99,28 @@ test('MongoDB-backed catalog and scanner lifecycle', { skip: !enabled }, async (
 
       await command('asset delete SOL, ADA')
       assert.deepEqual((await state()).assets, ['BTC', 'ETH'])
+
+      // Opt-in demo seed is idempotent and exposes contextual pair preferences.
+      await seedDemo()
+      await seedDemo()
+      const showcase = await readWorkspaceState()
+      assert.equal(showcase.assetDetails.find(a => a.symbol === 'BTC').markets.length, 2)
+      assert.ok(showcase.memberships.some(m =>
+        m.asset === 'BTC' && m.collection === 'demo-usdt' && m.preferences.marketSymbol === 'BTC-USDT'))
+      assert.equal(showcase.eventRules.length, 2)
+      const simulated = await triggerDemoEvent()
+      assert.equal(simulated.results.length, 1)
+      assert.equal(simulated.results[0].actions.length, 2)
+      assert.ok(eventEngine.snapshots.list().length >= 1)
+
+      // Snapshot process is disabled by default and stores captures only in RAM.
+      const snapshotProcess = await Process.findOne({ name: 'demo-snapshots' })
+      assert.equal(snapshotProcess.enabled, false)
+      await Process.updateOne({ _id: snapshotProcess._id }, { $set: { enabled: true } })
+      const beforeCount = eventEngine.snapshots.list().length
+      await snapshotScheduler.tick()
+      assert.ok(eventEngine.snapshots.list().length > beforeCount)
+      await Process.updateOne({ _id: snapshotProcess._id }, { $set: { enabled: false } })
     } finally {
       await new Promise(resolve => server.close(resolve))
     }
