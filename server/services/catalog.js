@@ -4,6 +4,7 @@ import Asset from '../models/Asset.js'
 import Collection from '../models/Collection.js'
 import Membership from '../models/Membership.js'
 import Subscription from '../models/Subscription.js'
+import { eventEngine } from './EventEngine.js'
 
 const isDuplicate = error => error?.code === 11000
 
@@ -13,6 +14,7 @@ export async function addAsset(input) {
   await Asset.init()
   try {
     await Asset.create({ symbol })
+    eventEngine.publish({ type: 'asset.created', source: { scope: 'asset', id: symbol }, data: { symbol } })
     return { symbol, created: true }
   } catch (error) {
     if (isDuplicate(error)) return { symbol, created: false }
@@ -42,6 +44,7 @@ export async function createCollection(input) {
   await Collection.init()
   try {
     await Collection.create({ name })
+    eventEngine.publish({ type: 'collection.created', source: { scope: 'collection', id: name }, data: { name } })
     return { name, created: true }
   } catch (error) {
     if (isDuplicate(error)) return { name, created: false }
@@ -108,6 +111,7 @@ export async function addMember(collectionInput, symbolInput) {
       { $setOnInsert: { collection: collection._id, asset: asset._id } },
       { upsert: true },
     )
+    if (result.upsertedCount === 1) eventEngine.publish({ type: 'membership.added', source: { scope: 'membership', id: String(result.upsertedId) }, context: [{ scope: 'asset', id: asset.symbol }, { scope: 'collection', id: collection.name }], data: { symbol: asset.symbol, collection: collection.name } })
     return { collection: collection.name, symbol: asset.symbol, added: result.upsertedCount === 1 }
   } catch (error) {
     if (isDuplicate(error)) return { collection: collection.name, symbol: asset.symbol, added: false }
@@ -122,6 +126,7 @@ export async function removeMember(collectionInput, symbolInput) {
   const asset = await Asset.findOne({ symbol })
   if (!asset) return { collection: collection.name, symbol, removed: false }
   const result = await Membership.deleteOne({ collection: collection._id, asset: asset._id })
+  if (result.deletedCount) eventEngine.publish({ type: 'membership.removed', source: { scope: 'asset', id: symbol }, context: [{ scope: 'collection', id: collection.name }], data: { symbol, collection: collection.name } })
   return { collection: collection.name, symbol, removed: result.deletedCount === 1 }
 }
 

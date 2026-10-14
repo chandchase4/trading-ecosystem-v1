@@ -5,6 +5,8 @@ import { normalizeSymbol } from './lib/validation.js'
 import * as demo from './services/demo.js'
 import { marketDataHub } from './services/MarketDataHub.js'
 import { eventEngine } from './services/EventEngine.js'
+import Process from './models/Process.js'
+import EventRule from './models/EventRule.js'
 
 // One command interpreter shared by HTTP requests and CLI entry points.
 export const HELP = `Trading Ecosystem commands
@@ -14,6 +16,12 @@ export const HELP = `Trading Ecosystem commands
   demo trigger                     Simulate BTC +5% (never a real signal)
   market list                      Show real Coinbase quotes / feed status
   event recent                     Show recent runtime events
+  event rule list                  List persisted event rules
+  event rule enable <name>         Enable an event rule
+  event rule disable <name>        Disable an event rule
+  process list                     List process configurations
+  process enable <name>            Enable scheduled snapshot process
+  process disable <name>           Disable scheduled snapshot process
   snapshot take                    Capture app market state in bounded RAM
   snapshot list                    List temporary captures
   status                           Ping MongoDB
@@ -96,6 +104,35 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
     return success(`Coinbase feed: ${state.connection}; ${state.quotes.length} live quotes; ${state.observationCount} buffered observations.`,
       ...(state.quotes.map(item => `${item.symbol} ${item.price} (${item.marketSymbol}) 5m window: ${item.changeWindowPct.toFixed(2)}% [${item.provider}]`)),
       state.unsupported.length ? `Without live feed: ${state.unsupported.join(', ')}` : '')
+  }
+  if (verb === 'event' && action === 'rule') {
+    const [operation, name, ...rest] = args
+    if (operation === 'list' && !name) {
+      const items = await EventRule.find().sort({ name: 1 }).lean()
+      return success(...items.map(rule => `${rule.name}: ${rule.enabled ? 'enabled' : 'disabled'} -> ${rule.trigger}`))
+    }
+    if (['enable', 'disable'].includes(operation) && name && !rest.length) {
+      const result = await EventRule.updateOne({ name }, { $set: { enabled: operation === 'enable' } })
+      if (!result.matchedCount) throw new Error('Event rule not found.')
+      services.eventEngine.invalidate()
+      return success(`Event rule ${name} ${operation}d.`)
+    }
+    usage('event rule [list|enable <name>|disable <name>]')
+  }
+  if (verb === 'process') {
+    if (action === 'list' && !args.length) {
+      const items = await Process.find().sort({ name: 1 }).lean()
+      return success(...items.map(p => `${p.name} [${p.kind}]: ${p.enabled ? 'enabled' : 'disabled'}`))
+    }
+    if (['enable','disable'].includes(action) && args.length === 1) {
+      const name = args[0]
+      const process = await Process.findOne({ name })
+      if (!process) throw new Error('Process not found.')
+      if (process.kind !== 'snapshot') throw new Error('Scheduled toggles currently support snapshot processes only.')
+      await Process.updateOne({ _id: process._id }, { $set: { enabled: action === 'enable' } })
+      return success(`Snapshot process ${name} ${action}d. Capture is RAM-only and expires as capacity fills.`)
+    }
+    usage('process [list|enable <snapshot-name>|disable <snapshot-name>]')
   }
   if (verb === 'event' && action === 'recent' && args.length === 0) {
     return success(...(services.eventEngine.getState().recentEvents.slice(0, 10).map(event => `${event.at}: ${event.type}`) || []))

@@ -6,6 +6,7 @@ import Process from '../models/Process.js'
 import Subscription from '../models/Subscription.js'
 import { ScannerRegistry } from './ScannerRegistry.js'
 import { marketDataHub } from './MarketDataHub.js'
+import { eventEngine } from './EventEngine.js'
 
 class ScannerService {
   constructor() {
@@ -154,7 +155,9 @@ class ScannerService {
 
   async start(input) {
     const process = await this.getProcess(input)
-    return this.refresh(process)
+    const result = await this.refresh(process)
+    eventEngine.publish({ type: 'process.started', source: { scope: 'process', id: process.name }, data: { kind: 'scanner' } })
+    return result
   }
 
   async sync(input) {
@@ -178,7 +181,9 @@ class ScannerService {
 
   async stop(input) {
     const process = await this.getProcess(input)
-    return { name: process.name, stopped: this.clearActive(String(process._id)) }
+    const stopped = this.clearActive(String(process._id))
+    if (stopped) eventEngine.publish({ type: 'process.stopped', source: { scope: 'process', id: process.name }, data: { kind: 'scanner' } })
+    return { name: process.name, stopped }
   }
 
   async status(input) {

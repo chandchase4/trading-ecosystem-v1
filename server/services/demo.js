@@ -59,8 +59,14 @@ export async function seedDemo() {
       { type: 'alert.record', config: { message: 'BTC +5%: captured market snapshot' } }],
     enabled: true, isDemo: true,
   } }, { upsert: true })
+  await EventRule.updateOne({ name: 'demo-on-snapshot' }, { $setOnInsert: {
+    name: 'demo-on-snapshot', target: { scope: 'global' }, trigger: 'snapshot.created',
+    conditions: [{ path: 'data.snapshotType', operator: 'eq', value: 'market-event' }],
+    actions: [{ type: 'alert.record', config: { message: 'An event snapshot was captured' } }],
+    enabled: false, isDemo: true,
+  } }, { upsert: true })
   eventEngine.invalidate()
-  return { assets: demoAssets.length, collection: 'demo-watchlist', scanner: 'demo-momentum', rules: 1 }
+  return { assets: demoAssets.length, collection: 'demo-watchlist', scanner: 'demo-momentum', rules: 2 }
 }
 
 export async function triggerDemoEvent() {

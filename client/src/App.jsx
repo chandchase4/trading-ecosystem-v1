@@ -268,6 +268,7 @@ export default function App() {
               <code className="event-trigger">{rule.trigger}</code>
               <div className="rule-flow"><span>{rule.conditions?.length || 0} conditions</span><b>→</b>{rule.actions?.map((action,index) => <span key={index}>{action.type}</span>)}</div>
               <small className="muted">Scope: {rule.target?.scope || 'global'}{rule.target?.id ? ' / '+rule.target.id : ''}</small>
+              {!demoMode && <div className="rule-switch"><button className="quiet" disabled={busy} onClick={() => runCommand(`event rule ${rule.enabled ? 'disable' : 'enable'} ${rule.name}`)}>{rule.enabled ? 'Disable rule' : 'Enable rule'}</button></div>}
             </article>)}
             {!view.eventRules.length && <div className="empty-state">No rules saved yet. Seed the backend to try an example BTC threshold rule.</div>}
             <div className="action-row">
