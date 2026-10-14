@@ -29,9 +29,11 @@ export class EventEngine {
     this.cacheUntil = 0
     this.alerts = []
     this.recent = []
+    this.executingEvent = null
     this.snapshots = new SnapshotManager({
       onCreated: snapshot => this.publish({
         type: 'snapshot.created',
+        depth: (this.executingEvent?.depth ?? 0) + 1,
         source: { scope: 'snapshot', id: snapshot.id },
         data: { snapshotType: snapshot.type, sourceType: snapshot.source?.type },
       }),
@@ -57,7 +59,7 @@ export class EventEngine {
 
   async evaluate(event) {
     const results = []
-    if (event.depth > 3) return results
+    if ((event.depth ?? 0) > 3) return results
     this.recent.unshift({ type: event.type, at: new Date().toISOString(), source: event.source })
     this.recent.length = Math.min(this.recent.length, 40)
     for (const rule of await this.currentRules()) {
@@ -73,11 +75,14 @@ export class EventEngine {
       for (const action of rule.actions || []) {
         try {
           if (action.type === 'snapshot.capture') {
-            captured = this.snapshots.capture({
+            // Preserve parent depth across the synchronous capture callback.
+            this.executingEvent = event
+            try { captured = this.snapshots.capture({
               type: action.config?.type || 'event',
               source: event.source || { scope: 'global', id: '' },
               payload: { event, market: this.hub.getState(), previousAction: captured?.id },
             })
+            } finally { this.executingEvent = null }
             output.actions.push({ type: action.type, snapshotId: captured.id })
           } else if (action.type === 'alert.record') {
             const alert = { id: String(Date.now()) + ':' + this.alerts.length,
