@@ -1,5 +1,7 @@
 import { connectDatabase } from '../db.js'
 import Asset from '../models/Asset.js'
+import Collection from '../models/Collection.js'
+import Membership from '../models/Membership.js'
 import Provider from '../models/Provider.js'
 import Exchange from '../models/Exchange.js'
 import EventRule from '../models/EventRule.js'
@@ -45,6 +47,25 @@ export async function seedDemo() {
   ]) await Exchange.updateOne({ slug: exchange.slug }, { $setOnInsert: exchange }, { upsert: true })
   await catalog.createCollection('demo-watchlist')
   for (const [symbol] of demoAssets) await catalog.addMember('demo-watchlist', symbol)
+  await catalog.createCollection('demo-usdt')
+  for (const symbol of ['BTC', 'SOL']) await catalog.addMember('demo-usdt', symbol)
+  // Configure preferences only for new, untouched memberships.
+  const demoLists = {
+    'demo-watchlist': {
+      BTC: ['coinbase', 'BTC-USD'], ETH: ['coinbase', 'ETH-USD'], SOL: ['coinbase', 'SOL-USD'],
+      TSLA: ['alpaca', 'TSLA'], NVDA: ['alpaca', 'NVDA'],
+    },
+    'demo-usdt': { BTC: ['okx', 'BTC-USDT'], SOL: ['okx', 'SOL-USDT'] },
+  }
+  for (const [listName, preferenceMap] of Object.entries(demoLists)) {
+    const list = await Collection.findOne({ name: listName })
+    for (const [symbol, [provider, marketSymbol]] of Object.entries(preferenceMap)) {
+      const asset = await Asset.findOne({ symbol })
+      await Membership.updateOne({ collection: list._id, asset: asset._id,
+        $or: [{ 'preferences.provider': '' }, { 'preferences.provider': { $exists: false } }] },
+        { $set: { 'preferences.provider': provider, 'preferences.marketSymbol': marketSymbol } })
+    }
+  }
   await scanners.create('demo-momentum')
   await scanners.attach('demo-momentum', 'demo-watchlist')
   await Process.updateOne({ name: 'demo-momentum' }, { $set: { config: { session: 'extended', mode: 'manual' } } })

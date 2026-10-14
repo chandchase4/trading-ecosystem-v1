@@ -24,13 +24,19 @@ export function createDemoWorkspace(pulse = 0, extraAlerts = []) {
   return {
     assets: demoAssets.map(item => item.symbol),
     assetDetails: demoAssets,
-    memberships: demoAssets.map(item => ({
-      id: 'membership-' + item.symbol, asset: item.symbol, collection: 'demo-watchlist',
-      preferences: { provider: item.markets[0].provider, marketSymbol: item.markets[0].symbol, priority: item.symbol === 'BTC' ? 90 : 50 },
-    })),
+    memberships: [
+      ...demoAssets.map(item => ({
+        id: 'membership-' + item.symbol, asset: item.symbol, collection: 'demo-watchlist',
+        preferences: { provider: item.symbol === 'SOL' ? 'coinbase' : item.markets[0].provider,
+          marketSymbol: item.symbol === 'SOL' ? 'SOL-USD' : item.markets[0].symbol, priority: item.symbol === 'BTC' ? 90 : 50 },
+      })),
+      { id: 'membership-btc-usdt', asset: 'BTC', collection: 'demo-usdt', preferences: { provider: 'okx', marketSymbol: 'BTC-USDT' } },
+      { id: 'membership-sol-usdt', asset: 'SOL', collection: 'demo-usdt', preferences: { provider: 'okx', marketSymbol: 'SOL-USDT' } },
+    ],
     collections: [
       { name: 'demo-watchlist', symbols: ['BTC', 'ETH', 'SOL', 'TSLA', 'NVDA'] },
       { name: 'promoted', symbols: ['BTC', 'SOL'] },
+      { name: 'demo-usdt', symbols: ['BTC', 'SOL'] },
     ],
     scanners: [
       { name: 'demo-momentum', running: true, symbols: ['BTC', 'ETH', 'SOL', 'TSLA', 'NVDA'], collections: ['demo-watchlist'] },
