@@ -2,6 +2,16 @@
 
 A MongoDB-backed trading workspace with **one command system** for CLI and React, a shared Coinbase public crypto WebSocket feed, reusable event rules, bounded short-lived market windows, and optional in-memory snapshots. **No trading orders.** Stocks do not have a live provider yet.
 
+## Edit the workspace from your phone
+
+Use the **Codespaces port 5173 preview**, with the backend on port 3001. If the API is reachable, the UI now **opens in Backend mode automatically**. No terminal commands are required for ordinary editing.
+
+- **Manage assets:** create/remove assets, edit names and notes, add/remove trading markets, assign collection memberships and adjust provider/pair/priority preferences.
+- **Manage automation:** create/edit/delete EventRules with conditions and ordered actions, configure snapshot schedules, manually capture/pin/delete/export snapshots.
+- **Lists & scanners:** use the original list/scanner controls to create, rename, attach and start scanners.
+
+The separate GitHub Pages address is still **static**. Its showcase data is illustrative, and no MongoDB edits can be saved from GitHub Pages. The interface now explains this and links to Codespaces rather than implying that demo tiles are editable real data. Never make your Codespaces forwarded ports public while working with the unauthenticated localhost-only API.
+
 ## Use it from your phone (GitHub Codespaces)
 
 First, pull the latest changes:
