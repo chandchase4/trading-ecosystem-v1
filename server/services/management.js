@@ -50,7 +50,7 @@ const actionField = (value) => {
 }
 
 export async function manage({ action, payload } = {}) {
-  if (typeof action !== 'string' || !payload || typeof payload !== 'object' || Array.isArray(payload)) fail('Invalid management request.')
+  if (typeof action !== 'string' || !action.trim() || !payload || typeof payload !== 'object' || Array.isArray(payload)) fail('Invalid management request.')
   await connectDatabase()
   switch (action) {
     case 'asset.update': {
