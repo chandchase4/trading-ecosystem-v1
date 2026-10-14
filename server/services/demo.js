@@ -72,9 +72,12 @@ export async function seedDemo() {
   await Process.updateOne({ name: 'demo-discovery' },
     { $setOnInsert: { name: 'demo-discovery', kind: 'discovery', enabled: false, intervalSeconds: 300, config: { throttled: true } } },
     { upsert: true })
-  await Process.updateOne({ name: 'demo-snapshots' },
-    { $setOnInsert: { name: 'demo-snapshots', kind: 'snapshot', enabled: false, intervalSeconds: 300, config: { target: 'app.market-data', history: false } } },
-    { upsert: true })
+  await EventRule.updateOne({ name: 'demo-snapshots' }, { $setOnInsert: {
+    name: 'demo-snapshots', target: { scope: 'global' }, trigger: 'schedule.demo-snapshots',
+    intervalSeconds: 300, conditions: [],
+    actions: [{ type: 'snapshot.capture', config: { type: 'app.market-data' } }],
+    enabled: false, isDemo: true,
+  } }, { upsert: true })
   await EventRule.updateOne({ name: 'demo-btc-5pct' }, { $setOnInsert: {
     name: 'demo-btc-5pct', target: { scope: 'global' }, trigger: 'market.momentum.detected',
     conditions: [{ path: 'data.symbol', operator: 'eq', value: 'BTC' }, { path: 'data.changePct', operator: 'gte', value: 5 }],
@@ -89,7 +92,7 @@ export async function seedDemo() {
     enabled: false, isDemo: true,
   } }, { upsert: true })
   eventEngine.invalidate()
-  return { assets: demoAssets.length, collection: 'demo-watchlist', scanner: 'demo-momentum', rules: 2 }
+  return { assets: demoAssets.length, collection: 'demo-watchlist', scanner: 'demo-momentum', rules: 3 }
 }
 
 export async function triggerDemoEvent() {
