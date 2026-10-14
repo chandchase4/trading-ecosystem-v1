@@ -5,9 +5,9 @@ Build a CLI-first market scanner with reusable backend services. Keep the initia
 
 ## Technology
 - Node.js (ES modules) for CLI, commands, and scanner execution
-- Express API later, when the frontend needs it
-- React + Vite starter already in `client/`, but frontend development is deferred
-- MongoDB + Mongoose planned for persistence; not yet configured
+- Express server scaffold created; no routes yet
+- React + Vite minimal frontend in `client/`; frontend development is deferred
+- MongoDB + Mongoose connection scaffold in `server/`; no models yet
 - Market data providers to be selected; no live market data exists yet
 
 ## Initial MVP
@@ -64,4 +64,4 @@ For the first CLI implementation, stop may simply pause a scanner until Discover
 - Never commit secrets or provider API keys.
 
 ## Next implementation step
-Add `server/` with Node.js ES modules, a CLI entry point, basic persistence and models, then a minimal ScannerManager. React stays available for later.
+Implement a minimal CLI with MongoDB models for assets, collections, and memberships; then add a small ScannerManager. React remains deferred.
