@@ -1,6 +1,7 @@
 import express from 'express'
 import { execute } from './commands.js'
 import { readWorkspaceState } from './workspace.js'
+import { eventEngine } from './services/EventEngine.js'
 
 export function createApp({ executeCommand = execute, readState = readWorkspaceState } = {}) {
   const app = express()
@@ -21,6 +22,13 @@ export function createApp({ executeCommand = execute, readState = readWorkspaceS
     } catch (error) {
       response.status(503).json({ ok: false, error: error.message })
     }
+  })
+
+  // Browser can export captures manually; this never causes persistence.
+  app.get('/api/snapshots/:id', (request, response) => {
+    const snapshot = eventEngine.snapshots.get(request.params.id)
+    if (!snapshot) return response.status(404).json({ ok: false, error: 'Snapshot not found or already evicted.' })
+    return response.json({ ok: true, snapshot })
   })
 
   app.post('/api/commands', async (request, response) => {

@@ -70,6 +70,24 @@ export default function App() {
     return () => window.clearInterval(timer)
   }, [demoMode])
 
+  async function exportSnapshot(snapshot) {
+    try {
+      const full = demoMode
+        ? { ...snapshot, isDemo: true, payload: { note: 'Illustrative snapshot payload. No live market data.', market: view.market } }
+        : (await api('snapshots/' + encodeURIComponent(snapshot.id))).snapshot
+      const blob = new Blob([JSON.stringify(full, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = (demoMode ? 'demo-' : '') + 'snapshot-' + snapshot.id + '.json'
+      document.body.append(link)
+      link.click()
+      link.remove()
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+      setMessage('Snapshot exported as JSON. You can save it locally or upload the file to your cloud storage.')
+    } catch (error) { setMessage(error.message) }
+  }
+
   function simulateDemo() {
     const now = new Date().toLocaleTimeString()
     setDemoAlerts(previous => [{
@@ -287,6 +305,7 @@ export default function App() {
               <div className="tiny">{(view.automation?.snapshotStorage?.totalBytes || 0).toLocaleString()} / {(view.automation?.snapshotStorage?.maxBytes || 2000000).toLocaleString()} bytes</div>
               {(view.automation?.snapshots || []).map(snapshot => <div className="event-row" key={snapshot.id}>
                 <strong>▣ {snapshot.type}</strong><small>{snapshot.capturedAt} · {snapshot.bytes} B</small>
+                <button className="quiet export-btn" onClick={() => exportSnapshot(snapshot)}>↓ Save JSON</button>
               </div>)}
               {!view.automation?.snapshots?.length && <div className="empty-state">No snapshots yet. Recording is off until you request a capture.</div>}
             </section>

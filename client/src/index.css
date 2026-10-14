@@ -228,3 +228,7 @@ button.tab.active { color: #a2fff0; background: #152d39; border: 1px solid #2862
   .market-panel .panel-title .feed-indicator { margin-left: 0; }
   .market-table th, .market-table td { padding-left: 7px; padding-right: 7px; }
 }
+
+.export-btn { justify-self: start; margin-top: 4px; padding: 5px 9px !important; min-height: 30px !important; }
+.rule-switch { margin-top: 10px; }
+.rule-switch button { min-height: 30px; padding: 5px 9px; }

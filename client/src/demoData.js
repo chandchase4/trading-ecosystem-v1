@@ -81,9 +81,10 @@ export function createDemoWorkspace(pulse = 0, extraAlerts = []) {
         { type: 'membership.priority.raised', at: 'Sample event', source: { scope: 'membership', id: 'SOL' } },
       ],
       snapshots: [
+        ...extraAlerts.map(item => ({ id: item.snapshotId + '-' + item.id, type: 'market-event', source: { type: 'asset', id: 'BTC' }, capturedAt: item.at, bytes: 6500, pinned: false })),
         { id: 'example-snap-1', type: 'discovery-results', source: { type: 'process', id: 'demo-discovery' }, capturedAt: 'Sample capture', bytes: 5800, pinned: false },
       ],
-      snapshotStorage: { totalBytes: 5800, maxBytes: 2000000, count: 1 },
+      snapshotStorage: { totalBytes: 5800 + extraAlerts.length * 6500, maxBytes: 2000000, count: 1 + extraAlerts.length },
     },
   }
 }
