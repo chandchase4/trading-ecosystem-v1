@@ -51,7 +51,7 @@ npm run dev
 
 Express starts on port 3001 after MongoDB connects. No HTTP API routes yet.
 
-To run offline automated unit tests (no Atlas credentials required): `npm test`.
+To run offline unit tests (no Atlas credentials required): `npm test`. The MongoDB integration test only runs in CI against a disposable local MongoDB service.
 
 ## Frontend (React + Vite)
 
