@@ -36,6 +36,13 @@ export class SnapshotManager {
   }
 
   get(id) { return this.items.find(item => item.id === id) || null }
+  remove(id) {
+    const index = this.items.findIndex(item => item.id === id)
+    if (index < 0) throw new Error('Snapshot not found.')
+    this.totalBytes -= this.items[index].bytes
+    this.items.splice(index, 1)
+  }
+
   pin(id, value = true) {
     const snapshot = this.get(id)
     if (!snapshot) throw new Error('Snapshot not found.')

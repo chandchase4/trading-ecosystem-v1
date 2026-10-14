@@ -2,6 +2,7 @@ import express from 'express'
 import { execute } from './commands.js'
 import { readWorkspaceState } from './workspace.js'
 import { eventEngine } from './services/EventEngine.js'
+import { manage } from './services/management.js'
 
 export function createApp({ executeCommand = execute, readState = readWorkspaceState } = {}) {
   const app = express()
@@ -29,6 +30,15 @@ export function createApp({ executeCommand = execute, readState = readWorkspaceS
     const snapshot = eventEngine.snapshots.get(request.params.id)
     if (!snapshot) return response.status(404).json({ ok: false, error: 'Snapshot not found or already evicted.' })
     return response.json({ ok: true, snapshot })
+  })
+
+  app.post('/api/manage', async (request, response) => {
+    try {
+      const result = await manage(request.body)
+      return response.json({ ok: true, ...result })
+    } catch (error) {
+      return response.status(400).json({ ok: false, error: error.message })
+    }
   })
 
   app.post('/api/commands', async (request, response) => {
