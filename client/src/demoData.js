@@ -14,9 +14,9 @@ export const demoAssets = [
   asset('NVDA', 'NVIDIA', 'stock', [{ symbol: 'NVDA', quote: 'USD', provider: 'alpaca', exchange: 'nasdaq', activityRank: 1, verified: false }]),
 ]
 const baseQuotes = [
-  ['BTC', 68245.18, 4.82, 'coinbase', 'BTC-USD', 1234000000],
-  ['ETH', 3892.46, 2.18, 'coinbase', 'ETH-USD', 640000000],
-  ['SOL', 174.62, 6.14, 'okx', 'SOL-USDT', 189000000],
+  ['BTC', 68245.18, 4.82, 'coinbase', 'BTC-USD', 19500],
+  ['ETH', 3892.46, 2.18, 'coinbase', 'ETH-USD', 250000],
+  ['SOL', 174.62, 6.14, 'okx', 'SOL-USDT', 1780000],
   ['TSLA', 248.32, -1.42, 'sample-only', 'TSLA', 0],
   ['NVDA', 139.75, 3.29, 'sample-only', 'NVDA', 0],
 ]

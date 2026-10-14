@@ -227,11 +227,12 @@ export default function App() {
               <h2>Market stream</h2>
               <p>{demoMode ? 'Animated sample prices — not live or tradeable' : 'Real Coinbase ticker feed when a crypto scanner is running'}</p>
             </div><span className={demoMode ? 'feed-indicator simulated' : 'feed-indicator'}>{demoMode ? 'SIMULATED' : view.market?.connection?.toUpperCase()}</span></div>
-            <div className="table-scroll"><table className="market-table"><thead><tr><th>Asset</th><th>Last price</th><th>Window Δ</th><th>Source / market</th></tr></thead>
+            <div className="table-scroll"><table className="market-table"><thead><tr><th>Asset</th><th>Last price</th><th>Window Δ</th><th>24h base vol.</th><th>Source / market</th></tr></thead>
             <tbody>{quotes.map(quote => <tr key={quote.symbol}>
               <td><strong>{quote.symbol}</strong><small>{view.assetDetails.find(a => a.symbol === quote.symbol)?.name || quote.marketSymbol}</small></td>
               <td className="price-cell">{formatPrice(quote.price)}</td>
               <td><span className={quote.changeWindowPct >= 0 ? 'change positive' : 'change negative'}>{quote.changeWindowPct >= 0 ? '+' : ''}{Number(quote.changeWindowPct).toFixed(2)}%</span></td>
+              <td className="volume-cell">{quote.volume24h ? Number(quote.volume24h).toLocaleString('en-US', { maximumFractionDigits: 2 }) : '—'}</td>
               <td className="source-cell">{quote.provider}<small>{quote.marketSymbol}{!demoMode && Date.now() - Date.parse(quote.timestamp) > 15000 ? ' · STALE' : ''}</small></td>
             </tr>)}</tbody></table>
             {!quotes.length && <div className="empty-state">No live quotes yet. Start a scanner containing BTC or ETH to connect to Coinbase. Stocks require a separate authenticated provider.</div>}</div>
@@ -271,6 +272,7 @@ export default function App() {
                 <span>{market.provider} / {market.exchange}</span>
               </div>) : <span className="empty">No markets registered yet.</span>}
               <div className="asset-foot"><span>{view.memberships.filter(m => m.asset === asset.symbol).length} memberships</span><span>Registry / persistent</span></div>
+              {view.memberships.filter(m => m.asset === asset.symbol && m.preferences?.marketSymbol).map(m => <div className="membership-detail" key={m.id}>{m.collection} → {m.preferences.marketSymbol} ({m.preferences.provider || 'default'})</div>)}
             </article>)}
             {!view.assetDetails.length && <div className="empty-state">No assets. Add symbols via Lists & scanners or use “Seed backend” for sample records.</div>}
           </div>

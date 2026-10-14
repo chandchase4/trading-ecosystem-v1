@@ -234,3 +234,6 @@ button.tab.active { color: #a2fff0; background: #152d39; border: 1px solid #2862
 .rule-switch button { min-height: 30px; padding: 5px 9px; }
 
 .unsupported-feed { margin: 12px 8px 0; padding: 10px 12px; color: #e3be9b; background: #2b241e; border: 1px solid #544431; border-radius: 8px; font-size: 11px; }
+
+.volume-cell { font: 600 12px ui-monospace, monospace; color: #bdd8da; }
+.membership-detail { margin-top: 8px; padding: 7px 9px; background: #20313c; border-radius: 6px; color: #9abfc7; font-size: 10px; }

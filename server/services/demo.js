@@ -28,6 +28,8 @@ export async function seedDemo() {
     if (!existing.assetClass || existing.assetClass === 'unknown') changes.assetClass = assetClass
     if (!existing.markets?.length) {
       changes.markets = [{ symbol: marketSymbol, base: symbol, quote, provider, exchange, activityRank: 1, verified: false }]
+      if (symbol === 'BTC') changes.markets.push({ symbol: 'BTC-USDT', base: 'BTC', quote: 'USDT', provider: 'okx', exchange: 'okx', activityRank: 2, verified: false })
+      if (symbol === 'SOL') changes.markets.unshift({ symbol: 'SOL-USD', base: 'SOL', quote: 'USD', provider: 'coinbase', exchange: 'coinbase', activityRank: 2, verified: false })
     }
     if (Object.keys(changes).length) await Asset.updateOne({ _id: existing._id }, { $set: changes })
   }
