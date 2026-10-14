@@ -3,12 +3,14 @@ import { createApp } from './api.js'
 import { connectDatabase, disconnectDatabase } from './db.js'
 import { marketDataHub } from './services/MarketDataHub.js'
 import { snapshotScheduler } from './services/SnapshotScheduler.js'
+import { eventEngine } from './services/EventEngine.js'
 
 const port = Number(process.env.PORT) || 3001
 
 try {
   await connectDatabase()
   console.log('Connected to MongoDB')
+  marketDataHub.onMomentum = event => eventEngine.publish(event)
   snapshotScheduler.start()
   // Only Vite's local proxy and the local CLI should talk to this API.
   const server = createApp().listen(port, '127.0.0.1', () => {

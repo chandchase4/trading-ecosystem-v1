@@ -59,3 +59,18 @@ test('event engine evaluates conditions and passes snapshot to alert action', as
   assert.equal(hit[0].actions.length, 2)
   assert.equal(engine.getState().alerts[0].snapshotId, engine.getState().snapshots[0].id)
 })
+
+test('hub emits one 5% momentum crossing and applies a cooldown', () => {
+  const hub = new MarketDataHub({ socketFactory: () => { throw new Error('no network') } })
+  hub.active.add('BTC')
+  const events = []
+  hub.onMomentum = event => events.push(event)
+  const t = 1_700_000_000_000
+  hub.ingest({ symbol: 'BTC', price: 100, timestamp: t, provider: 'coinbase', marketSymbol: 'BTC-USD' })
+  hub.ingest({ symbol: 'BTC', price: 106, timestamp: t + 31_000, provider: 'coinbase', marketSymbol: 'BTC-USD' })
+  hub.ingest({ symbol: 'BTC', price: 107, timestamp: t + 32_000, provider: 'coinbase', marketSymbol: 'BTC-USD' })
+  assert.equal(events.length, 1)
+  assert.equal(events[0].data.symbol, 'BTC')
+  assert.equal(events[0].demo, false)
+  hub.stop()
+})

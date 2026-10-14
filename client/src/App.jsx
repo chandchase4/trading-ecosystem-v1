@@ -232,9 +232,10 @@ export default function App() {
               <td><strong>{quote.symbol}</strong><small>{view.assetDetails.find(a => a.symbol === quote.symbol)?.name || quote.marketSymbol}</small></td>
               <td className="price-cell">{formatPrice(quote.price)}</td>
               <td><span className={quote.changeWindowPct >= 0 ? 'change positive' : 'change negative'}>{quote.changeWindowPct >= 0 ? '+' : ''}{Number(quote.changeWindowPct).toFixed(2)}%</span></td>
-              <td className="source-cell">{quote.provider}<small>{quote.marketSymbol}</small></td>
+              <td className="source-cell">{quote.provider}<small>{quote.marketSymbol}{!demoMode && Date.now() - Date.parse(quote.timestamp) > 15000 ? ' · STALE' : ''}</small></td>
             </tr>)}</tbody></table>
             {!quotes.length && <div className="empty-state">No live quotes yet. Start a scanner containing BTC or ETH to connect to Coinbase. Stocks require a separate authenticated provider.</div>}</div>
+            {!demoMode && view.market?.unsupported?.length > 0 && <div className="unsupported-feed">No live provider connected for: {view.market.unsupported.join(', ')}</div>}
             <div className="table-foot"><span>{view.market?.observationCount || 0} temporary price observations</span><span>5-minute rolling buffer · no price history writes</span></div>
           </section>
           <div className="side-stack">

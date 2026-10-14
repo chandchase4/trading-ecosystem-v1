@@ -27,12 +27,28 @@ export class MarketDataHub {
     this.connection = 'idle'
     this.lastError = ''
     this.closed = false
+    this.lastSignal = new Map()
+    this.onMomentum = null
   }
 
   ingest({ symbol, price, volume24h = null, provider, marketSymbol, timestamp = Date.now() }) {
     const validPrice = finitePositive(price)
     if (!validPrice || !this.active.has(symbol)) return
+    const prior = this.latest.get(symbol)
     const recent = this.window.add(symbol, { price: validPrice, timestamp })
+    // Emit only on a threshold crossing with a cooldown. No DB or rule work
+    // occurs inside the WebSocket message handler.
+    if (recent?.spanSeconds >= 30 && recent.changeWindowPct >= 5 &&
+        (prior?.changeWindowPct ?? 0) < 5 &&
+        timestamp - (this.lastSignal.get(symbol) || 0) > 300_000) {
+      this.lastSignal.set(symbol, timestamp)
+      this.onMomentum?.({
+        type: 'market.momentum.detected',
+        source: { scope: 'asset', id: symbol },
+        data: { symbol, changePct: recent.changeWindowPct, interval: '5m',
+          provider, marketSymbol }, demo: false,
+      })
+    }
     this.latest.set(symbol, {
       symbol, price: validPrice,
       volume24h: finitePositive(volume24h),
@@ -49,6 +65,7 @@ export class MarketDataHub {
     const active = new Set(symbols)
     this.active = active
     this.window.prune(active)
+    for (const symbol of this.lastSignal.keys()) if (!active.has(symbol)) this.lastSignal.delete(symbol)
     for (const symbol of this.latest.keys()) {
       if (!active.has(symbol)) this.latest.delete(symbol)
     }
