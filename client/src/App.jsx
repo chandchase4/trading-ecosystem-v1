@@ -275,7 +275,8 @@ export default function App() {
                 : <button onClick={() => runCommand('demo trigger')} disabled={busy}>⚡ Trigger test BTC +5%</button>}
               {demoMode
                 ? <button className="secondary" onClick={() => runCommand('demo seed', () => { setDemoMode(false); setTab('automation') }, true)} disabled={busy || !online}>Seed backend with demo records</button>
-                : <button className="secondary" onClick={() => runCommand('snapshot take')} disabled={busy}>▣ Take RAM snapshot</button>}
+                : <><button className="secondary" onClick={() => runCommand('snapshot take')} disabled={busy}>▣ Take RAM snapshot</button>
+                 <button className="quiet" onClick={() => runCommand('demo seed')} disabled={busy}>Seed backend samples</button></>}
             </div>
           </section>
           <div className="side-stack">
@@ -368,7 +369,7 @@ export default function App() {
             <span className="section-number">02</span>
             <div>
               <h2>Scanners</h2>
-              <p>Manual scanner CRUD. No live market feeds yet.</p>
+              <p>Shared scanner configuration. Supported crypto streams connect while running.</p>
             </div>
           </div>
           <form className="form-inline" onSubmit={event => {

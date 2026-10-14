@@ -205,7 +205,7 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
     if (action === 'show' || action === 'status') {
       requireArgs(args, 1, `scanner ${action} <name>`)
       const result = await s.status(args[0])
-      return success(`${result.name}: ${result.running ? 'registry active' : 'stopped'}; collections: ${result.collections.join(', ') || 'none'}; active symbols: ${result.symbols.join(', ') || 'none'}; shared registry total: ${result.totalUniqueAssets}. No price scanning yet.`)
+      return success(`${result.name}: ${result.running ? 'registry active' : 'stopped'}; collections: ${result.collections.join(', ') || 'none'}; active symbols: ${result.symbols.join(', ') || 'none'}; shared registry total: ${result.totalUniqueAssets}. Real-time crypto quotes appear when a supported asset has an active feed.`)
     }
     if (action === 'rename') {
       requireArgs(args, 2, 'scanner rename <old> <new>')
@@ -232,7 +232,7 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
     if (action === 'start' || action === 'sync') {
       requireArgs(args, 1, `scanner ${action} <name>`)
       const result = await s[action](args[0])
-      return success(`${result.name}: registry active, ${result.subscriptions} subscription(s), ${result.symbols.length} distinct symbol(s) (${result.symbols.join(', ') || 'none'}). No live price feed yet.`)
+      return success(`${result.name}: registry active, ${result.subscriptions} subscription(s), ${result.symbols.length} distinct symbol(s) (${result.symbols.join(', ') || 'none'}). Supported crypto WebSocket feed is enabled; stock feed requires credentials.`)
     }
     if (action === 'stop' || action === 'kill') {
       requireArgs(args, 1, `scanner ${action} <name>`)

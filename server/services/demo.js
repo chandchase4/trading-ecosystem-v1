@@ -21,10 +21,15 @@ export async function seedDemo() {
   await connectDatabase()
   for (const [symbol, name, assetClass, marketSymbol, quote, provider, exchange] of demoAssets) {
     await catalog.addAsset(symbol)
-    await Asset.updateOne({ symbol }, { $set: {
-      name, assetClass,
-      markets: [{ symbol: marketSymbol, base: symbol, quote, provider, exchange, activityRank: 1, verified: false }],
-    } })
+    // Never replace genuine catalog metadata just to set up an example.
+    const existing = await Asset.findOne({ symbol })
+    const changes = {}
+    if (!existing.name) changes.name = name
+    if (!existing.assetClass || existing.assetClass === 'unknown') changes.assetClass = assetClass
+    if (!existing.markets?.length) {
+      changes.markets = [{ symbol: marketSymbol, base: symbol, quote, provider, exchange, activityRank: 1, verified: false }]
+    }
+    if (Object.keys(changes).length) await Asset.updateOne({ _id: existing._id }, { $set: changes })
   }
   for (const provider of [
     { slug: 'coinbase', name: 'Coinbase', assetClasses: ['crypto'], capabilities: ['websocket', 'ticker'], settings: { enabled: true, priority: 1 }, isDemo: true },

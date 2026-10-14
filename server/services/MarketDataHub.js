@@ -66,6 +66,8 @@ export class MarketDataHub {
   }
 
   connect() {
+    // CI tests must not open public network connections.
+    if (process.env.TEST_MONGODB_URI) { this.connection = 'test-disabled'; return }
     if (this.socket || this.closed) return
     this.connection = 'connecting'
     const socket = this.socketFactory(COINBASE_URL)
