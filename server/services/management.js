@@ -23,7 +23,7 @@ const positive = (value, max = Number.MAX_SAFE_INTEGER) => {
   return n
 }
 const ruleName = name => normalizeName(name)
-const triggerPattern = /^[a-z][a-z0-9_.]{2,79}$/
+const triggerPattern = /^[a-z][a-z0-9_.-]{2,79}$/
 const eventScopes = ['global','asset','collection','membership','process','subscription','snapshot']
 const operators = ['eq','ne','gt','gte','lt','lte','in']
 const actions = ['snapshot.capture','alert.record','collection.add']
