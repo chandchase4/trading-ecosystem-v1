@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 
 const blankRule = () => ({
   name: '', trigger: 'market.momentum.detected', scope: 'global', targetId: '',
-  enabled: false,
+  enabled: false, intervalSeconds: 300,
   conditions: [{ path: 'data.symbol', operator: 'eq', value: 'BTC' }],
   actions: [
     { type: 'snapshot.capture', config: { type: 'market-event' } },
@@ -14,7 +14,7 @@ function ruleToForm(rule) {
   if (!rule) return blankRule()
   return {
     name: rule.name, trigger: rule.trigger, scope: rule.target?.scope || 'global',
-    targetId: rule.target?.id || '', enabled: rule.enabled || false,
+    targetId: rule.target?.id || '', enabled: rule.enabled || false, intervalSeconds: rule.intervalSeconds || 300,
     conditions: (rule.conditions || []).map(c => ({ path: c.path, operator: c.operator, value: c.value })),
     actions: (rule.actions || []).map(a => ({ type: a.type, config: a.config || {} })),
   }
@@ -40,7 +40,7 @@ function RuleEditor({ workspace, onManage, onCommand, busy, demoMode, onSimulate
   const save = async e => {
     e.preventDefault()
     const validated = {
-      ...form, conditions: form.conditions.map(c => ({
+      ...form, trigger: form.trigger === 'schedule.tick' ? `schedule.${form.name}` : form.trigger, conditions: form.conditions.map(c => ({
         ...c, value: ['gt','gte','lt','lte'].includes(c.operator) ? Number(c.value) : c.value,
       })),
     }
@@ -74,7 +74,7 @@ function RuleEditor({ workspace, onManage, onCommand, busy, demoMode, onSimulate
           <label>Trigger
             <input required list="available-triggers" value={form.trigger} onChange={e => change('trigger', e.target.value)} placeholder="market.momentum.detected"/>
             <datalist id="available-triggers">
-              {['market.momentum.detected','asset.created','asset.updated','collection.created','membership.added','membership.removed','membership.updated','process.started','process.stopped','snapshot.created'].map(t => <option key={t} value={t}/>)}
+              {['market.data.received','market.momentum.detected','schedule.tick','asset.created','asset.updated','collection.created','membership.added','membership.removed','membership.updated','process.started','process.stopped','snapshot.created'].map(t => <option key={t} value={t}/>)}
             </datalist>
           </label>
           <label>Attached to
@@ -87,6 +87,10 @@ function RuleEditor({ workspace, onManage, onCommand, busy, demoMode, onSimulate
             <datalist id="available-targets">{(sourceSuggestions[form.scope] || []).map(id => <option key={id} value={id}/>)}</datalist>
           </label>}
         </div>
+        {form.trigger.startsWith('schedule.') || form.trigger === 'schedule.tick' ? <label>Schedule every (seconds)
+          <input type="number" min="5" max="86400" value={form.intervalSeconds} onChange={e => change('intervalSeconds', Number(e.target.value))}/>
+          <small className="hint">Use schedule.tick; saved as schedule.&lt;rule-name&gt;.</small>
+        </label> : null}
         <label className="check-label"><input type="checkbox" checked={form.enabled} onChange={e => change('enabled', e.target.checked)}/> Enabled (execute actions when a matching event occurs)</label>
         <div className="editor-subtitle">Conditions <small>All conditions must match. Leave empty to match every event of this type.</small></div>
         {form.conditions.map((c,i) => <div className="condition-row" key={i}>
@@ -127,7 +131,7 @@ function RuleEditor({ workspace, onManage, onCommand, busy, demoMode, onSimulate
               }
             }}>Delete rule</button>}
         </div>
-        <p className="hint">Rules only react to events emitted by the backend. The scanner currently emits a 5% crossing event, not every market tick. Alert recording is in-app, not email.</p>
+        <p className="hint">Rules only react to events emitted by the backend. Market data emits market.data.received on every valid tick. Schedule rules use per-rule intervals. Alert recording is in-app, not email.</p>
       </form>
       <div className="action-row">
         <button className="secondary" disabled={busy} onClick={() => onCommand('demo trigger')}>⚡ Test simulated BTC +5%</button>
@@ -137,38 +141,14 @@ function RuleEditor({ workspace, onManage, onCommand, busy, demoMode, onSimulate
   </section>
 }
 
-function SnapshotProcessRow({ item, onManage, busy }) {
-  const [interval, setIntervalSeconds] = useState(item.intervalSeconds || 300)
-  const [enabled, setEnabled] = useState(item.enabled || false)
-  return <div className="process-settings">
-    <div className="editor-card-title"><div><strong>{item.name}</strong><small className="tiny">Automatic snapshots · RAM only</small></div><span className={enabled ? 'pill live' : 'pill'}>{enabled ? 'Enabled' : 'Disabled'}</span></div>
-    <div className="edit-grid">
-      <label>Capture interval (seconds)<input type="number" min="5" max="86400" value={interval} onChange={e => setIntervalSeconds(e.target.value)}/></label>
-      <label className="check-label"><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)}/> Run automatically</label>
-    </div>
-    <button className="secondary" disabled={busy} onClick={() => onManage('process.update', {
-      name: item.name, enabled, intervalSeconds: interval,
-    })}>Save schedule</button>
-  </div>
-}
-
 export default function EventEditor({ workspace, demoMode, onManage, onCommand, onSimulate, busy }) {
-  const [newProcess, setNewProcess] = useState('')
   return <div className="automation-edit-stack">
     <RuleEditor workspace={workspace} demoMode={demoMode} onManage={onManage} onCommand={onCommand} onSimulate={onSimulate} busy={busy}/>
     <section className="panel">
-      <div className="panel-title"><span className="section-number">04</span><div><h2>Background processes</h2><p>Snapshot capture can run on a schedule; discovery workers remain planned, not active.</p></div></div>
-      {(workspace.processes || []).filter(p => p.kind === 'snapshot').map(p =>
-        demoMode ? <div className="event-row" key={p.name}><strong>{p.name}</strong><small>Disabled by default · {p.intervalSeconds}s</small></div>
-          : <SnapshotProcessRow key={p.name} item={p} onManage={onManage} busy={busy}/>)}
-      {!demoMode && <form className="edit-inline" onSubmit={async e => {
-        e.preventDefault()
-        const ok = await onManage('process.create', { name: newProcess, kind: 'snapshot' })
-        if (ok) setNewProcess('')
-      }}>
-        <input required placeholder="New snapshot process" value={newProcess} onChange={e => setNewProcess(e.target.value)}/>
-        <button disabled={busy || !newProcess.trim()}>Create</button>
-      </form>}
+      <div className="panel-title"><span className="section-number">04</span><div>
+        <h2>Scheduled actions</h2>
+        <p>Snapshots are actions, not processes. Create an event rule with trigger <code>schedule.tick</code>, select Capture snapshot, and set the interval.</p>
+      </div></div>
     </section>
   </div>
 }
