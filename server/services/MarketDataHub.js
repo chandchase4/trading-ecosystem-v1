@@ -95,11 +95,20 @@ export class MarketDataHub {
       this.lastError = ''
       this.retryCount = 0
       const product_ids = [...this.active].filter(s => PAIRS.has(s)).map(s => PAIRS.get(s))
-      if (product_ids.length) socket.send(JSON.stringify({ type: 'subscribe', channel: 'ticker', product_ids }))
+      if (product_ids.length) {
+        socket.send(JSON.stringify({ type: 'subscribe', channel: 'ticker', product_ids }))
+        // Separate channel subscription keeps quiet markets connected.
+        socket.send(JSON.stringify({ type: 'subscribe', channel: 'heartbeats' }))
+      }
     })
     socket.on('message', bytes => {
       try {
         const message = JSON.parse(String(bytes))
+        if (message.type === 'error') {
+          this.lastError = String(message.message || 'Provider subscription error')
+          this.connection = 'error'
+          return
+        }
         for (const event of message.events || []) {
           for (const ticker of event.tickers || []) {
             const symbol = [...PAIRS].find(([,pair]) => pair === ticker.product_id)?.[0]
