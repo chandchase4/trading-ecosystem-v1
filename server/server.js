@@ -217,6 +217,10 @@ app.use((error, _req, res, _next) => {
 const port = Number(process.env.PORT || 3001)
 try {
   await connectDatabase()
+  // If an event rule promotes an asset, refresh active scanner subscriptions.
+  events.on('collection.asset.added', () => {
+    void refresh().catch(error => console.error('Scanner sync failed:', error.message))
+  })
   await refresh()
   console.log('MongoDB connected. Trading Ecosystem MVP ready.')
   const server = app.listen(port, '127.0.0.1', () => console.log(`API listening on port ${port}`))
