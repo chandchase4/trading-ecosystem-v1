@@ -3,8 +3,7 @@ import { execute } from './commands.js'
 import { readWorkspaceState } from './workspace.js'
 import { eventEngine } from './services/EventEngine.js'
 import { manage } from './services/management.js'
-import { coinbaseRestProvider } from './services/CoinbaseRestProvider.js'
-import { marketIngestion } from './services/MarketIngestion.js'
+import { dataManager } from './services/DataManager.js'
 
 export function createApp({ executeCommand = execute, readState = readWorkspaceState } = {}) {
   const app = express()
@@ -30,7 +29,7 @@ export function createApp({ executeCommand = execute, readState = readWorkspaceS
   // Explicit bounded REST quote fetch. No arbitrary URLs or symbols accepted.
   app.get('/api/providers/coinbase/ticker', async (request, response) => {
     try {
-      const ticker = await coinbaseRestProvider.ticker(request.query.symbol)
+      const ticker = await dataManager.ticker(request.query.symbol)
       response.json({ ok: true, ticker })
     } catch (error) {
       const limited = /rate limit/.test(error.message)
@@ -39,7 +38,7 @@ export function createApp({ executeCommand = execute, readState = readWorkspaceS
   })
 
   app.get('/api/providers/status', (_request, response) => {
-    response.json({ ok: true, rest: coinbaseRestProvider.getState(), ingestion: marketIngestion.getState() })
+    response.json({ ok: true, ...dataManager.getState() })
   })
 
   // Browser can export captures manually; this never causes persistence.

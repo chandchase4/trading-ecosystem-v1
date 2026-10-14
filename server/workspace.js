@@ -20,7 +20,7 @@ export async function readWorkspaceState() {
     Provider.find().sort({ 'settings.priority': 1 }).select('slug name assetClasses capabilities settings isDemo').lean(),
     Exchange.find().sort({ name: 1 }).select('slug name assetClasses timezone isDemo').lean(),
     Process.find().sort({ name: 1 }).select('name kind enabled intervalSeconds config').lean(),
-    EventRule.find().sort({ name: 1 }).select('name trigger target conditions actions enabled isDemo').lean(),
+    EventRule.find().sort({ name: 1 }).select('name trigger intervalSeconds target conditions actions enabled isDemo').lean(),
   ])
   return {
     assets,
@@ -42,7 +42,7 @@ export async function readWorkspaceState() {
       settings: item.settings, isDemo: item.isDemo })),
     exchanges: exchanges.map(item => ({ slug: item.slug, name: item.name,
       assetClasses: item.assetClasses, timezone: item.timezone, isDemo: item.isDemo })),
-    eventRules: rules.map(item => ({ name: item.name, trigger: item.trigger, enabled: item.enabled,
+    eventRules: rules.map(item => ({ name: item.name, trigger: item.trigger, intervalSeconds: item.intervalSeconds, enabled: item.enabled,
       target: item.target, conditions: item.conditions, actions: item.actions, isDemo: item.isDemo })),
     registry: { uniqueAssets: scanners.registry.uniqueAssetCount },
     market: marketDataHub.getState(),
