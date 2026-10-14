@@ -29,6 +29,7 @@ export class MarketDataHub {
     this.closed = false
     this.lastSignal = new Map()
     this.onMomentum = null
+    this.onData = null
   }
 
   ingest({ symbol, price, volume24h = null, provider, marketSymbol, timestamp = Date.now() }) {
@@ -49,6 +50,11 @@ export class MarketDataHub {
           provider, marketSymbol }, demo: false,
       })
     }
+    const update = {
+      symbol, price: validPrice, volume24h: finitePositive(volume24h),
+      provider, marketSymbol, timestamp: new Date(timestamp).toISOString(),
+    }
+    this.onData?.(update)
     this.latest.set(symbol, {
       symbol, price: validPrice,
       volume24h: finitePositive(volume24h),
