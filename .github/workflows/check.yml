@@ -6,6 +6,11 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:7
+        ports:
+          - 27017:27017
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,6 +20,8 @@ jobs:
         working-directory: server
       - run: npm test
         working-directory: server
+        env:
+          TEST_MONGODB_URI: mongodb://127.0.0.1:27017/trading_ecosystem_mvp_ci
       - run: npm ci
         working-directory: client
       - run: npm run build
