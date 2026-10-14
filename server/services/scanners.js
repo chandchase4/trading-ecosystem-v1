@@ -46,6 +46,27 @@ class ScannerService {
     return docs.map(doc => doc.name)
   }
 
+  async rename(input, nextInput) {
+    const process = await this.getProcess(input)
+    const next = normalizeName(nextInput)
+    if (process.name === next) return { name: process.name, next, renamed: false }
+    try {
+      await Process.updateOne({ _id: process._id }, { $set: { name: next } })
+      return { name: process.name, next, renamed: true }
+    } catch (error) {
+      if (error?.code === 11000) throw new Error(`Scanner "${next}" already exists.`)
+      throw error
+    }
+  }
+
+  async delete(input) {
+    const process = await this.getProcess(input)
+    this.clearActive(String(process._id))
+    await Subscription.deleteMany({ process: process._id })
+    await Process.deleteOne({ _id: process._id })
+    return { name: process.name, deleted: true }
+  }
+
   async attach(scannerInput, collectionInput) {
     const process = await this.getProcess(scannerInput)
     const collection = await this.getCollection(collectionInput)
@@ -82,10 +103,21 @@ class ScannerService {
     return docs.filter(doc => doc.collection)
   }
 
+  clearActive(key) {
+    const subscriptions = this.activeProcesses.get(key)
+    if (!subscriptions) return false
+    for (const id of subscriptions) this.registry.detach(id)
+    this.activeProcesses.delete(key)
+    return true
+  }
+
   async refresh(process) {
     const key = String(process._id)
     const subscriptions = await this.configuredCollections(process._id)
-    if (subscriptions.length === 0) throw new Error('Attach a collection before starting this scanner.')
+    if (subscriptions.length === 0) {
+      this.clearActive(key)
+      throw new Error('Attach a collection before starting this scanner.')
+    }
 
     const collectionIds = subscriptions.map(doc => doc.collection._id)
     const memberships = await Membership.find({ collection: { $in: collectionIds } }).populate('asset', 'symbol').lean()
@@ -129,14 +161,20 @@ class ScannerService {
     return this.refresh(process)
   }
 
+  // Keep live registry in step with changes from either CLI or web commands.
+  async refreshActive() {
+    for (const key of [...this.activeProcesses.keys()]) {
+      const process = await Process.findById(key)
+      if (!process) { this.clearActive(key); continue }
+      const subs = await this.configuredCollections(process._id)
+      if (!subs.length) { this.clearActive(key); continue }
+      await this.refresh(process)
+    }
+  }
+
   async stop(input) {
     const process = await this.getProcess(input)
-    const key = String(process._id)
-    const subscriptions = this.activeProcesses.get(key)
-    if (!subscriptions) return { name: process.name, stopped: false }
-    for (const id of subscriptions) this.registry.detach(id)
-    this.activeProcesses.delete(key)
-    return { name: process.name, stopped: true }
+    return { name: process.name, stopped: this.clearActive(String(process._id)) }
   }
 
   async status(input) {
@@ -150,6 +188,28 @@ class ScannerService {
       symbols: activeIds ? this.registry.symbolsFor(activeIds) : [],
       totalUniqueAssets: this.registry.uniqueAssetCount,
     }
+  }
+
+  async details() {
+    await connectDatabase()
+    const processes = await Process.find({ kind: 'scanner' }).sort({ name: 1 }).lean()
+    const subs = await Subscription.find({
+      process: { $in: processes.map(item => item._id) },
+    }).populate('collection', 'name').lean()
+    const collections = new Map(processes.map(item => [String(item._id), []]))
+    for (const item of subs) {
+      if (item.collection) collections.get(String(item.process))?.push(item.collection.name)
+    }
+
+    return processes.map(process => {
+      const active = this.activeProcesses.get(String(process._id))
+      return {
+        name: process.name,
+        collections: (collections.get(String(process._id)) ?? []).sort(),
+        running: Boolean(active),
+        symbols: active ? this.registry.symbolsFor(active) : [],
+      }
+    })
   }
 }
 

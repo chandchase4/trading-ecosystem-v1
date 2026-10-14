@@ -1,25 +1,26 @@
 import 'dotenv/config'
-import express from 'express'
-import mongoose from 'mongoose'
-
-const app = express()
-app.use(express.json())
+import { createApp } from './api.js'
+import { connectDatabase, disconnectDatabase } from './db.js'
 
 const port = Number(process.env.PORT) || 3001
 
-if (!process.env.MONGODB_URI) {
-  console.error('Missing MONGODB_URI. Create server/.env from server/.env.example.')
-  process.exit(1)
-}
-
 try {
-  await mongoose.connect(process.env.MONGODB_URI, {
-    serverSelectionTimeoutMS: 10000,
+  await connectDatabase()
+  console.log('Connected to MongoDB')
+  // Only Vite's local proxy and the local CLI should talk to this API.
+  const server = createApp().listen(port, '127.0.0.1', () => {
+    console.log(`Backend listening on http://127.0.0.1:${port}`)
   })
 
-  console.log('Connected to MongoDB')
-  app.listen(port, () => console.log(`Server listening on port ${port}`))
+  for (const signal of ['SIGINT', 'SIGTERM']) {
+    process.once(signal, () => {
+      server.close(async () => {
+        await disconnectDatabase()
+        process.exit(0)
+      })
+    })
+  }
 } catch (error) {
-  console.error('Failed to connect to MongoDB:', error.message)
-  process.exit(1)
+  console.error('Backend startup failed:', error.message)
+  process.exitCode = 1
 }

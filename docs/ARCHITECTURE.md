@@ -1,75 +1,48 @@
-# Architecture — Trading Ecosystem v1
+# Trading Ecosystem v1 architecture
 
-## Goal
-Build a CLI-first market scanner with reusable backend services. Keep the initial MVP small, while leaving room for a future React dashboard, automated discovery, a trading journal, analytics, and machine-learning experiments.
+## Current foundation
 
-## Technology
-- Node.js (ES modules) for CLI, commands, and scanner execution
-- Express server scaffold created; no routes yet
-- React + Vite minimal frontend in `client/`; frontend development is deferred
-- MongoDB + Mongoose persistence for assets, collections, memberships, scanner processes and collection subscriptions
-- Market data providers to be selected; no live market data exists yet
+- **Node.js / Express** is the long-running backend process, bound to localhost port 3001.
+- **MongoDB / Mongoose** persists assets, collections, memberships, scanner definitions, and scanner-to-collection attachments.
+- **`server/commands.js`** is the one validated command handler, used by Express `POST /api/commands`.
+- **`server/cli.js`** is a command client of that API: CLI and browser share the **same in-memory runtime state**.
+- **React / Vite** provides a mobile-friendly CRUD workspace. Dev Vite proxies `/api` to localhost:3001.
+- **`server/workspace.js`** projects read-only dashboard data via `GET /api/state`; no second UI-specific mutation implementation.
+- **ScannerRegistry** stores one asset per symbol with a set of active subscription references. The server process owns it.
+- Node unit, API, and MongoDB integration tests run under GitHub Actions.
 
-## Initial MVP
-1. CLI commands for creating, listing, and managing assets and collections.
-2. Memberships connecting assets to collections.
-3. Processes and subscriptions configuring which collection a scanner monitors.
-4. CommandManager routing start, stop, kill, and status commands.
-5. ScannerManager maintaining a deduplicated active asset registry and evaluating basic scanning rules.
-6. Basic market data fetching sufficient to support the initial scanner.
+## Current scope
 
-Do not implement notifications, a dashboard, automatic discovery, advanced state restoration, or elaborate event infrastructure in the initial MVP.
+- Manually create, list, rename and delete assets/collections/scanners, and manage memberships and subscriptions.
+- Add multiple ticker symbols with comma or whitespace separators.
+- Start, stop, and synchronize scanner registries. No polling, market data, strategy filters, alerts, discovery, orders, or trading.
+- Configurations survive restart, but the active scanner registry does **not**.
 
-## Core concepts
-- **Asset**: instrument identity and metadata.
-- **Collection**: reusable list of assets.
-- **Membership**: asset-to-collection relation; unique on asset and collection.
-- **Process**: reusable scanner/discovery definition with defaults.
-- **Subscription**: configured process instance, target asset/collection/membership, and output collections.
-- **Command**: action submitted through the CLI and dispatched to the appropriate manager.
+## Logical data model
 
-## Manager boundaries
-- **CommandManager** interprets and dispatches commands.
-- **SubscriptionManager** will own subscription configuration and lifecycle as complexity grows.
-- **ScannerManager** evaluates scanner subscriptions. One asset may be referenced by many subscriptions, but should appear only once in the active registry.
-- **DataManager** will centralize market-data requests, caching, provider rate limits, and shared indicator calculations. Implement incrementally, after core scanning works.
-- **DiscoveryManager** is a future peer of ScannerManager, not an MVP requirement.
+- **Asset:** global symbol identity.
+- **Collection:** a named list of assets.
+- **Membership:** unique Asset + Collection relationship.
+- **Process:** named scanner configuration.
+- **Subscription:** unique Process + Collection relationship.
 
-## Scanner registry
-Maintain an asset-to-subscription reference map, for example:
+Deleting a collection removes its memberships and scanner attachments, but does not delete the underlying assets. Deleting an asset removes its memberships. Deleting a scanner removes only its subscriptions, not lists or assets.
 
-```js
-activeAssets.get("BTC") // Set(["momentum", "breakout"])
-```
+## Security and hosting
 
-Removing a subscription only removes its reference. Remove the asset from active monitoring when no active subscription requires it. Shared data acquisition should avoid redundant requests.
+- The real `server/.env` is ignored by Git; do not commit credentials.
+- MongoDB access happens only server-side.
+- The Express API only listens on `127.0.0.1` and is accessed from the browser through Vite's dev proxy.
+- Keep Codespaces forwarded port 5173 private.
+- GitHub Pages only serves static React; it has **no live backend**. A properly hosted authenticated backend is a separate future deployment decision.
+- HTTP command input is restricted to our command grammar. Never expose a shell or accept arbitrary JavaScript through the command route.
 
-## Future behavior — not MVP
-- Start = actively scan.
-- Stop = switch to low-resource discovery mode.
-- Kill = remove runtime activity while preserving configuration.
-- Discovery, Normal, and Intensive monitoring modes, independently tracked per asset/subscription.
-- Automatic promotions/demotions with configurable thresholds.
-- DataManager acquires a shared feed at the fastest required frequency.
-- Provider failover, retries, priority scheduling, notifications, structured events, undo, snapshots, and recovery.
-- MongoDB-backed synchronization and event-driven updates for collection changes.
+## Later stages (not yet implemented)
 
-For the first CLI implementation, stop may simply pause a scanner until DiscoveryManager exists.
+1. Provider adapters for stocks and crypto (provider reliability and feed coverage to be selected).
+2. Shared feed and data caching, deduplicated by asset and interval.
+3. Rule evaluation and scanner filters.
+4. More sophisticated lifecycle and monitoring modes.
+5. Discovery, notifications, history, analytics, and eventual portfolio modules.
 
-## Working conventions
-- Keep modules small and focused, with a modular-monolith architecture.
-- Do not couple scanner logic to CLI presentation or React components.
-- Prefer clear contracts and working end-to-end slices over premature abstraction.
-- Use `README.md` for setup and `docs/ARCHITECTURE.md` for architecture and roadmap.
-- Never commit secrets or provider API keys.
-
-## Implemented so far
-- MongoDB-backed asset/collection/membership CLI commands
-- Saved scanner definitions and collection attachments
-- In-memory deduplicated registry, with start/stop/sync/status commands
-- Node unit tests and CI for registry, validation, and command routing
-
-The active registry is **not** a live scanner; no prices are fetched, no market rules are evaluated, and no background service runs after CLI exit. Updates to a collection require `scanner sync` to refresh an already-active registry.
-
-## Next implementation step
-Choose a market-data provider, then wire a minimal polling/evaluation loop into the scanner. Keep React deferred.
+Keep each stage small and verified end-to-end rather than adding untested infrastructure.

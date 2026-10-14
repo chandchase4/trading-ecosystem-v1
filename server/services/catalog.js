@@ -3,16 +3,14 @@ import { normalizeSymbol, normalizeName } from '../lib/validation.js'
 import Asset from '../models/Asset.js'
 import Collection from '../models/Collection.js'
 import Membership from '../models/Membership.js'
+import Subscription from '../models/Subscription.js'
 
-function isDuplicate(error) {
-  return error?.code === 11000
-}
+const isDuplicate = error => error?.code === 11000
 
 export async function addAsset(input) {
   const symbol = normalizeSymbol(input)
   await connectDatabase()
   await Asset.init()
-
   try {
     await Asset.create({ symbol })
     return { symbol, created: true }
@@ -28,11 +26,20 @@ export async function listAssets() {
   return assets.map(asset => asset.symbol)
 }
 
+export async function deleteAsset(input) {
+  const symbol = normalizeSymbol(input)
+  await connectDatabase()
+  const asset = await Asset.findOne({ symbol })
+  if (!asset) return { symbol, deleted: false }
+  await Membership.deleteMany({ asset: asset._id })
+  await Asset.deleteOne({ _id: asset._id })
+  return { symbol, deleted: true }
+}
+
 export async function createCollection(input) {
   const name = normalizeName(input)
   await connectDatabase()
   await Collection.init()
-
   try {
     await Collection.create({ name })
     return { name, created: true }
@@ -53,6 +60,34 @@ async function getCollection(input) {
   const collection = await Collection.findOne({ name })
   if (!collection) throw new Error(`Collection "${name}" not found. Create it first.`)
   return collection
+}
+
+export async function renameCollection(input, nextInput) {
+  const name = normalizeName(input)
+  const next = normalizeName(nextInput)
+  await connectDatabase()
+  const collection = await getCollection(name)
+  if (name === next) return { name, next, renamed: false }
+  try {
+    await Collection.updateOne({ _id: collection._id }, { $set: { name: next } })
+    return { name, next, renamed: true }
+  } catch (error) {
+    if (isDuplicate(error)) throw new Error(`Collection "${next}" already exists.`)
+    throw error
+  }
+}
+
+export async function deleteCollection(input) {
+  const name = normalizeName(input)
+  await connectDatabase()
+  const collection = await Collection.findOne({ name })
+  if (!collection) return { name, deleted: false }
+  // Collections are configuration objects. Deleting one removes its memberships
+  // and scanner attachments, but never deletes the underlying assets.
+  await Subscription.deleteMany({ collection: collection._id })
+  await Membership.deleteMany({ collection: collection._id })
+  await Collection.deleteOne({ _id: collection._id })
+  return { name, deleted: true }
 }
 
 async function getAsset(input) {
@@ -96,4 +131,20 @@ export async function showCollection(input) {
   const memberships = await Membership.find({ collection: collection._id }).populate('asset', 'symbol').lean()
   const symbols = memberships.filter(item => item.asset).map(item => item.asset.symbol).sort()
   return { name: collection.name, symbols }
+}
+
+export async function getWorkspaceCollections() {
+  await connectDatabase()
+  const collections = await Collection.find().sort({ name: 1 }).select('name').lean()
+  const memberships = await Membership.find({
+    collection: { $in: collections.map(item => item._id) },
+  }).populate('asset', 'symbol').lean()
+  const symbolsByCollection = new Map(collections.map(item => [String(item._id), []]))
+  for (const row of memberships) {
+    if (row.asset) symbolsByCollection.get(String(row.collection))?.push(row.asset.symbol)
+  }
+  return collections.map(item => ({
+    name: item.name,
+    symbols: (symbolsByCollection.get(String(item._id)) ?? []).sort(),
+  }))
 }

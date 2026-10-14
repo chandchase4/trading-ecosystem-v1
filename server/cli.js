@@ -1,12 +1,37 @@
 import 'dotenv/config'
 import readline from 'node:readline'
-import { execute } from './commands.js'
-import { disconnectDatabase } from './db.js'
+import { HELP } from './commands.js'
 
+const port = Number(process.env.PORT) || 3001
+const endpoint = `http://127.0.0.1:${port}/api/commands`
+
+// CLI and browser both submit to the same long-running backend, so their
+// in-memory scanner states are identical.
 async function run(input) {
-  const result = await execute(input)
-  for (const line of result.lines) console.log(line)
-  return result.keepRunning
+  const command = input.trim()
+  if (!command) return true
+  if (command === 'exit' || command === 'quit') return false
+  if (command === 'help') {
+    console.log(HELP)
+    return true
+  }
+
+  let response
+  try {
+    response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ command }),
+      signal: AbortSignal.timeout(20000),
+    })
+  } catch {
+    throw new Error('Backend unavailable. Start "npm run dev" in a separate server terminal.')
+  }
+
+  const payload = await response.json()
+  if (!response.ok || !payload.ok) throw new Error(payload.error || 'Command failed.')
+  for (const line of payload.lines ?? []) console.log(line)
+  return payload.keepRunning !== false
 }
 
 async function main() {
@@ -23,7 +48,6 @@ async function main() {
     output: process.stdout,
     terminal: interactive,
   })
-
   if (interactive) {
     rl.setPrompt('trade> ')
     rl.prompt()
@@ -37,7 +61,6 @@ async function main() {
     }
     if (interactive) rl.prompt()
   }
-
   rl.close()
 }
 
@@ -46,6 +69,4 @@ try {
 } catch (error) {
   console.error(`Error: ${error.message}`)
   process.exitCode = 1
-} finally {
-  await disconnectDatabase()
 }
