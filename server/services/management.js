@@ -113,10 +113,10 @@ export async function manage({ action, payload } = {}) {
     case 'process.create': {
       const name = normalizeName(payload.name)
       const kind = payload.kind
-      if (!['snapshot','discovery'].includes(kind)) fail('Create scanners using scanner controls.')
+      if (kind !== 'discovery') fail('Create scanners using scanner controls.')
       if (await Process.exists({ name })) fail('A process with that name already exists.')
       await Process.create({ name, kind, enabled: false, intervalSeconds: 300 })
-      return { message: `Created disabled ${kind} process ${name}. ${kind === 'discovery' ? 'Discovery execution is not available yet.' : 'Enable it after configuring the capture interval.'}` }
+      return { message: `Created disabled discovery process ${name}. Discovery execution is not available yet.` }
     }
     case 'process.delete': {
       const name = normalizeName(payload.name)
@@ -131,11 +131,7 @@ export async function manage({ action, payload } = {}) {
       const name = normalizeName(payload.name)
       const doc = await Process.findOne({ name })
       if (!doc) fail('Process not found.')
-      if (doc.kind !== 'snapshot') fail('Only snapshot processes can be configured here. Use scanner controls for scanners; discovery execution is not implemented yet.')
-      doc.enabled = payload.enabled === true
-      doc.intervalSeconds = intRange(payload.intervalSeconds, 5, 86400)
-      await doc.save()
-      return { message: `Snapshot process ${name} saved: ${doc.enabled ? 'enabled' : 'disabled'}, every ${doc.intervalSeconds}s. RAM only.` }
+      fail('Process configuration is not available here; snapshots are EventRule actions.')
     }
     case 'provider.update': {
       const slug = normalizeName(payload.slug)
@@ -157,7 +153,9 @@ export async function manage({ action, payload } = {}) {
       if (scope !== 'global' && !id) fail('A target ID is required for scoped rules.')
       const conditions = conditionsField(payload.conditions || [])
       const parsedActions = actionField(payload.actions)
-      const fields = { name, target: { scope, id }, trigger, conditions, actions: parsedActions, enabled: payload.enabled === true }
+      const intervalSeconds = trigger.startsWith('schedule.') ? intRange(payload.intervalSeconds ?? 300, 5, 86400) : 300
+      if (trigger.startsWith('schedule.') && trigger !== `schedule.${name}`) fail('Scheduled triggers must be schedule.<rule-name>.')
+      const fields = { name, target: { scope, id }, trigger, intervalSeconds, conditions, actions: parsedActions, enabled: payload.enabled === true }
       if (existing) { existing.set(fields); await existing.save() }
       else await EventRule.create(fields)
       eventEngine.invalidate()
