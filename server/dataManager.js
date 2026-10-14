@@ -23,6 +23,7 @@ export class DataManager {
     this.active = new Set()
     this.calls = []
     this.pendingRequests = new Map()
+    this.pendingRegistration = new Map()
     this.socket = null
     this.connected = 'idle'
     this.retryTimer = null
@@ -51,9 +52,12 @@ export class DataManager {
     this.engine.ingest(quote)
     // Keep provider callback fast, but guarantee the canonical Asset exists
     // before an EventRule attempts collection.add on the first quote.
-    void Promise.resolve().then(() => this.registry.ensureFromData(quote))
+    const committed = Promise.resolve().then(() => this.registry.ensureFromData(quote))
       .then(() => this.events.publish('market.data.received', quote, { scannerIds: consumerIds }))
-      .catch(error => { this.error = error.message })
+    this.pendingRegistration.set(symbol, committed)
+    void committed.catch(error => { this.error = error.message }).finally(() => {
+      if (this.pendingRegistration.get(symbol) === committed) this.pendingRegistration.delete(symbol)
+    })
     return true
   }
 
@@ -80,6 +84,8 @@ export class DataManager {
     if (!validPrice(payload.price)) throw new Error('Coinbase returned an invalid price.')
     this.ingest({ symbol, marketSymbol, provider: 'coinbase', price: payload.price,
       volume24h: payload.volume })
+    // REST callers receive confirmation only after auto-registration finishes.
+    await this.pendingRegistration.get(symbol)
     return this.quotes.get(symbol)
   }
 
