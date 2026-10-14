@@ -1,0 +1,8 @@
+{
+  "name": "trading-ecosystem-mvp-server",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "node --watch server.js", "start": "node server.js", "test": "node --test" },
+  "engines": { "node": ">=20" },
+  "dependencies": { "dotenv": "^17.2.3", "express": "^5.1.0", "mongoose": "^8.19.0", "ws": "^8.18.3" }
+}
