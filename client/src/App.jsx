@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createDemoWorkspace } from './demoData.js'
+import AssetEditor from './AssetEditor.jsx'
+import EventEditor from './EventEditor.jsx'
 
 const emptyState = {
   assets: [],
@@ -112,12 +114,14 @@ export default function App() {
         if (!cancelled) {
           setWorkspace(data.state)
           setOnline(true)
+          setDemoMode(false)
         }
       })
       .catch(error => {
         if (!cancelled) {
           setOnline(false)
-          setMessage(error.message)
+          // The public GitHub Pages build remains a labeled demo.
+          // Editing is available only through the running Codespaces preview.
         }
       })
     return () => { cancelled = true }
@@ -130,10 +134,10 @@ export default function App() {
   }, [view.collections, selectedList])
 
   async function runCommand(command, afterSuccess, allowDemo = false) {
-    if (busy || !command.trim()) return
+    if (busy || !command.trim()) return false
     if (demoMode && !allowDemo) {
-      setMessage('Demo preview is read-only. Switch to Backend or click “Seed backend” to run real commands.')
-      return
+      setMessage('Showcase data cannot be edited. Open your Codespaces port 5173 preview to edit actual records.')
+      return false
     }
     setBusy(true)
     setMessage('')
@@ -147,13 +151,33 @@ export default function App() {
       const next = await refresh()
       setMessage(output)
       afterSuccess?.(next)
+      return true
     } catch (error) {
       setHistory(previous => [{ command, output: error.message, error: true }, ...previous].slice(0, 10))
       setMessage(error.message)
       if (error.message.includes('Backend')) setOnline(false)
+      return false
     } finally {
       setBusy(false)
     }
+  }
+
+  async function manageItem(action, payload) {
+    if (busy || demoMode || !online) {
+      setMessage('Editing requires the running Codespaces backend.')
+      return false
+    }
+    setBusy(true)
+    setMessage('')
+    try {
+      const result = await api('manage', { method: 'POST', body: JSON.stringify({ action, payload }) })
+      await refresh()
+      setMessage(result.message || 'Saved successfully.')
+      return true
+    } catch (error) {
+      setMessage('Could not save: ' + error.message)
+      return false
+    } finally { setBusy(false) }
   }
 
   function confirmCommand(question, command) {
@@ -191,7 +215,7 @@ export default function App() {
         <div>
           <p className="eyebrow">TRADING ECOSYSTEM / CONTROL CENTER</p>
           <h1>See the market. Control the system.</h1>
-          <p className="muted">Assets, live feeds, scanners and event automation — one shared workspace.</p>
+          <p className="muted">Assets, live feeds, scanners and event automation — one shared workspace. Manage everything directly from these tabs.</p>
         </div>
         <button className="quiet" disabled={busy} onClick={() => refresh().then(() => setMessage('Backend refreshed.')).catch(error => { setOnline(false); setMessage(error.message) })}>↻ Refresh</button>
       </div>
@@ -201,13 +225,14 @@ export default function App() {
         </div>
         <div className="mode-actions">
           <button className={demoMode ? 'active-mode' : 'quiet'} onClick={() => { setDemoMode(true); setTab('overview') }}>Preview demo</button>
-          <button className={!demoMode ? 'active-mode' : 'quiet'} onClick={() => { setDemoMode(false); setTab('overview') }}>Backend</button>
+          <button className={!demoMode ? 'active-mode' : 'quiet'} disabled={!online} title={!online ? 'Open Codespaces port 5173 with the backend running' : 'Use real MongoDB records'} onClick={() => { setDemoMode(false); setTab('overview') }}>Backend</button>
         </div>
       </div>
+      {!online && <div className="mode-help">This page is the static showcase. To add, edit, or delete real items, open the <strong>Codespaces port 5173 preview</strong> while your Node backend is running. <a href="https://github.com/codespaces" target="_blank" rel="noreferrer">Open Codespaces ↗</a></div>}
       <nav className="tab-nav" aria-label="Workspace sections">
         {[
-          ['overview', '◈ Overview'], ['assets', '◇ Asset registry'],
-          ['automation', '⚡ Events & snapshots'], ['workspace', '▤ Lists & scanners'],
+          ['overview', '◈ Overview'], ['assets', '◇ Manage assets'],
+          ['automation', '⚡ Manage automation'], ['workspace', '▤ Lists & scanners'],
         ].map(([key,label]) => <button key={key} className={tab === key ? 'tab active' : 'tab'} onClick={() => setTab(key)}>{label}</button>)}
       </nav>
 
@@ -221,6 +246,8 @@ export default function App() {
       {message && <div role="status" className="notice">{message}</div>}
 
       {tab === 'overview' && (
+        <>
+        <div className="quick-actions"><button onClick={() => setTab('assets')}>+ Add / edit assets</button><button onClick={() => setTab('automation')} className="secondary">⚡ Edit event rules</button><button onClick={() => setTab('workspace')} className="quiet">Manage lists & scanners</button></div>
         <div className="dashboard-grid">
           <section className="panel market-panel">
             <div className="panel-title"><span className="section-number">01</span><div>
@@ -259,9 +286,10 @@ export default function App() {
             </section>
           </div>
         </div>
+        </>
       )}
       {tab === 'assets' && (
-        <section className="panel">
+        demoMode ? <section className="panel">
           <div className="panel-title"><span className="section-number">01</span><div><h2>Canonical asset registry</h2><p>One identity per asset. Every provider/exchange market stays separate; memberships hold contextual overrides.</p></div></div>
           <div className="asset-grid">
             {view.assetDetails.map(asset => <article className="asset-card" key={asset.symbol}>
@@ -278,37 +306,26 @@ export default function App() {
           </div>
           <div className="directory-row"><div><h3>Providers</h3>{view.providers.map(provider => <span className="directory-chip" key={provider.slug}>{provider.name} <small>{provider.capabilities?.join(' · ')}</small></span>)}</div>
           <div><h3>Exchanges</h3>{view.exchanges.map(exchange => <span className="directory-chip" key={exchange.slug}>{exchange.name}</span>)}</div></div>
-        </section>
+        </section> : <AssetEditor workspace={view} onCommand={runCommand} onManage={manageItem} busy={busy}/>
       )}
       {tab === 'automation' && (
         <div className="dashboard-grid">
-          <section className="panel">
-            <div className="panel-title"><span className="section-number">01</span><div><h2>Event rules</h2><p>Trigger → conditions → ordered actions. Disabled by default unless explicitly enabled.</p></div></div>
-            {view.eventRules.map(rule => <article className="rule-card" key={rule.name}>
-              <div className="rule-heading"><strong>{rule.name}</strong><span className={rule.enabled ? 'pill live' : 'pill'}>{rule.enabled ? 'Enabled' : 'Disabled'}</span></div>
-              <code className="event-trigger">{rule.trigger}</code>
-              <div className="rule-flow"><span>{rule.conditions?.length || 0} conditions</span><b>→</b>{rule.actions?.map((action,index) => <span key={index}>{action.type}</span>)}</div>
-              <small className="muted">Scope: {rule.target?.scope || 'global'}{rule.target?.id ? ' / '+rule.target.id : ''}</small>
-              {!demoMode && <div className="rule-switch"><button className="quiet" disabled={busy} onClick={() => runCommand(`event rule ${rule.enabled ? 'disable' : 'enable'} ${rule.name}`)}>{rule.enabled ? 'Disable rule' : 'Enable rule'}</button></div>}
-            </article>)}
-            {!view.eventRules.length && <div className="empty-state">No rules saved yet. Seed the backend to try an example BTC threshold rule.</div>}
-            <div className="action-row">
-              {demoMode ? <button onClick={simulateDemo}>⚡ Simulate BTC +5% event</button>
-                : <button onClick={() => runCommand('demo trigger')} disabled={busy}>⚡ Trigger test BTC +5%</button>}
-              {demoMode
-                ? <button className="secondary" onClick={() => runCommand('demo seed', () => { setDemoMode(false); setTab('automation') }, true)} disabled={busy || !online}>Seed backend with demo records</button>
-                : <><button className="secondary" onClick={() => runCommand('snapshot take')} disabled={busy}>▣ Take RAM snapshot</button>
-                 <button className="quiet" onClick={() => runCommand('demo seed')} disabled={busy}>Seed backend samples</button></>}
-            </div>
-          </section>
+          <EventEditor workspace={view} demoMode={demoMode} busy={busy} onManage={manageItem} onCommand={runCommand} onSimulate={simulateDemo}/>
           <div className="side-stack">
             <section className="panel">
               <div className="panel-title"><span className="section-number">02</span><div><h2>Snapshots</h2><p>Reusable data envelopes · space-bounded RAM</p></div></div>
               <div className="storage-meter"><div style={{width: Math.min(100, 100 * (view.automation?.snapshotStorage?.totalBytes || 0) / (view.automation?.snapshotStorage?.maxBytes || 2000000)) + '%'}} /></div>
               <div className="tiny">{(view.automation?.snapshotStorage?.totalBytes || 0).toLocaleString()} / {(view.automation?.snapshotStorage?.maxBytes || 2000000).toLocaleString()} bytes</div>
+              {!demoMode && <button className="secondary" disabled={busy} onClick={() => runCommand('snapshot take')}>+ Capture snapshot</button>}
               {(view.automation?.snapshots || []).map(snapshot => <div className="event-row" key={snapshot.id}>
                 <strong>▣ {snapshot.type}</strong><small>{snapshot.capturedAt} · {snapshot.bytes} B</small>
-                <button className="quiet export-btn" onClick={() => exportSnapshot(snapshot)}>↓ Save JSON</button>
+                <div className="snapshot-actions">
+                  <button className="quiet export-btn" onClick={() => exportSnapshot(snapshot)}>↓ Save JSON</button>
+                  {!demoMode && <>
+                    <button className="quiet export-btn" disabled={busy} onClick={() => manageItem('snapshot.pin', { id: snapshot.id, pinned: !snapshot.pinned })}>{snapshot.pinned ? 'Unpin' : 'Pin'}</button>
+                    <button className="text-button danger" disabled={busy} onClick={() => { if (window.confirm('Discard this temporary snapshot?')) manageItem('snapshot.delete', { id: snapshot.id }) }}>Delete</button>
+                  </>}
+                </div>
               </div>)}
               {!view.automation?.snapshots?.length && <div className="empty-state">No snapshots yet. Recording is off until you request a capture.</div>}
             </section>
