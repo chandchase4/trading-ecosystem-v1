@@ -46,6 +46,7 @@ function App() {
     symbol: '', action: 'alert.record', targetCollection: '', enabled: true })
   const [pullSymbol, setPullSymbol] = useState('BTC')
   const [editing, setEditing] = useState({})
+  const [thresholds, setThresholds] = useState({})
 
   const load = async (silent = false) => {
     try {
@@ -174,7 +175,13 @@ function App() {
           <div className="grid two">{state.processes.map(p => {
             const running = state.scanner.running.find(s => s.id === p.id)
             return <div className="panel" key={p.id}><div className="panel-heading"><h2>{p.name}</h2><Badge good={p.enabled}>{p.enabled ? 'RUNNING' : 'STOPPED'}</Badge></div>
-              <p className="hint">{p.kind.toUpperCase()} · MIN 5M CHANGE: {p.minChangePct}%</p>
+              <p className="hint">{p.kind.toUpperCase()} · 5-minute positive change filter</p>
+              {p.kind === 'scanner' && <form className="inline-form" onSubmit={e => { e.preventDefault(); void act('/processes/' + p.id, 'PATCH',
+                { minChangePct: Number(thresholds[p.id] ?? p.minChangePct) }, 'Scanner filter saved') }}>
+                <Field label="MIN % CHANGE"><input type="number" min="0" max="1000" step=".1" value={thresholds[p.id] ?? p.minChangePct}
+                  onChange={e => setThresholds({ ...thresholds, [p.id]: e.target.value })}/></Field>
+                <button disabled={busy}>Save filter</button>
+              </form>}
               <div className="metric"><strong>{running?.symbols.length || 0}</strong><span>monitored symbols</span></div>
               <div className="metric"><strong>{running?.matches.length || 0}</strong><span>current matches</span></div>
               <div className="formbuttons">
