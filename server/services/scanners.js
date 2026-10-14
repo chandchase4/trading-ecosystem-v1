@@ -5,6 +5,8 @@ import Membership from '../models/Membership.js'
 import Process from '../models/Process.js'
 import Subscription from '../models/Subscription.js'
 import { ScannerRegistry } from './ScannerRegistry.js'
+import { marketDataHub } from './MarketDataHub.js'
+import { eventEngine } from './EventEngine.js'
 
 class ScannerService {
   constructor() {
@@ -95,6 +97,7 @@ class ScannerService {
     await Subscription.deleteOne({ _id: subscription._id })
     this.registry.detach(String(subscription._id))
     this.activeProcesses.get(String(process._id))?.delete(String(subscription._id))
+    marketDataHub.sync([...this.registry.assets.keys()])
     return { name: process.name, collection: collection.name, detached: true }
   }
 
@@ -108,6 +111,7 @@ class ScannerService {
     if (!subscriptions) return false
     for (const id of subscriptions) this.registry.detach(id)
     this.activeProcesses.delete(key)
+    marketDataHub.sync([...this.registry.assets.keys()])
     return true
   }
 
@@ -140,6 +144,7 @@ class ScannerService {
     }
 
     this.activeProcesses.set(key, newIds)
+    marketDataHub.sync([...this.registry.assets.keys()])
     return {
       name: process.name,
       subscriptions: newIds.size,
@@ -150,7 +155,9 @@ class ScannerService {
 
   async start(input) {
     const process = await this.getProcess(input)
-    return this.refresh(process)
+    const result = await this.refresh(process)
+    eventEngine.publish({ type: 'process.started', source: { scope: 'process', id: process.name }, data: { kind: 'scanner' } })
+    return result
   }
 
   async sync(input) {
@@ -174,7 +181,9 @@ class ScannerService {
 
   async stop(input) {
     const process = await this.getProcess(input)
-    return { name: process.name, stopped: this.clearActive(String(process._id)) }
+    const stopped = this.clearActive(String(process._id))
+    if (stopped) eventEngine.publish({ type: 'process.stopped', source: { scope: 'process', id: process.name }, data: { kind: 'scanner' } })
+    return { name: process.name, stopped }
   }
 
   async status(input) {

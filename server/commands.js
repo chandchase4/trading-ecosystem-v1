@@ -2,11 +2,28 @@ import * as catalog from './services/catalog.js'
 import { pingDatabase } from './db.js'
 import { scanners } from './services/scanners.js'
 import { normalizeSymbol } from './lib/validation.js'
+import * as demo from './services/demo.js'
+import { marketDataHub } from './services/MarketDataHub.js'
+import { eventEngine } from './services/EventEngine.js'
+import Process from './models/Process.js'
+import EventRule from './models/EventRule.js'
 
 // One command interpreter shared by HTTP requests and CLI entry points.
 export const HELP = `Trading Ecosystem commands
 
   help                             Show commands
+  demo seed                        Add sample catalog, processes, event rule
+  demo trigger                     Simulate BTC +5% (never a real signal)
+  market list                      Show real Coinbase quotes / feed status
+  event recent                     Show recent runtime events
+  event rule list                  List persisted event rules
+  event rule enable <name>         Enable an event rule
+  event rule disable <name>        Disable an event rule
+  process list                     List process configurations
+  process enable <name>            Enable scheduled snapshot process
+  process disable <name>           Disable scheduled snapshot process
+  snapshot take                    Capture app market state in bounded RAM
+  snapshot list                    List temporary captures
   status                           Ping MongoDB
 
   asset add BTC, TSLA               Add one or more symbols
@@ -58,7 +75,7 @@ const lineList = (values, empty) => values.length
   ? values.map((value, i) => `${i + 1}. ${value}`).join('\n')
   : empty
 
-export async function execute(input, services = { catalog, pingDatabase, scanners }) {
+export async function execute(input, services = { catalog, pingDatabase, scanners, demo, marketDataHub, eventEngine }) {
   if (typeof input !== 'string' || input.length > 1000) throw new Error('Command must be text under 1000 characters.')
   const parts = input.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return success()
@@ -73,6 +90,65 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
 
   const c = services.catalog
   const s = services.scanners
+
+  if (verb === 'demo' && action === 'seed' && args.length === 0) {
+    const result = await services.demo.seedDemo()
+    return success(`Demo seeded: ${result.assets} catalog assets, ${result.collection}, ${result.scanner}, ${result.rules} event rule. Start the demo scanner for real supported crypto quotes.`)
+  }
+  if (verb === 'demo' && action === 'trigger' && args.length === 0) {
+    const result = await services.demo.triggerDemoEvent()
+    return success(`SIMULATED BTC +5.2% event: ${result.results.length} rule(s) matched; ${result.results.flatMap(rule => rule.actions.map(a => a.type)).join(', ') || 'no actions'}.`)
+  }
+  if (verb === 'market' && action === 'list' && args.length === 0) {
+    const state = services.marketDataHub.getState()
+    return success(`Coinbase feed: ${state.connection}; ${state.quotes.length} live quotes; ${state.observationCount} buffered observations.`,
+      ...(state.quotes.map(item => `${item.symbol} ${item.price} (${item.marketSymbol}) 5m window: ${item.changeWindowPct.toFixed(2)}% [${item.provider}]`)),
+      state.unsupported.length ? `Without live feed: ${state.unsupported.join(', ')}` : '')
+  }
+  if (verb === 'event' && action === 'rule') {
+    const [operation, name, ...rest] = args
+    if (operation === 'list' && !name) {
+      const items = await EventRule.find().sort({ name: 1 }).lean()
+      return success(...items.map(rule => `${rule.name}: ${rule.enabled ? 'enabled' : 'disabled'} -> ${rule.trigger}`))
+    }
+    if (['enable', 'disable'].includes(operation) && name && !rest.length) {
+      const result = await EventRule.updateOne({ name }, { $set: { enabled: operation === 'enable' } })
+      if (!result.matchedCount) throw new Error('Event rule not found.')
+      services.eventEngine.invalidate()
+      return success(`Event rule ${name} ${operation}d.`)
+    }
+    usage('event rule [list|enable <name>|disable <name>]')
+  }
+  if (verb === 'process') {
+    if (action === 'list' && !args.length) {
+      const items = await Process.find().sort({ name: 1 }).lean()
+      return success(...items.map(p => `${p.name} [${p.kind}]: ${p.enabled ? 'enabled' : 'disabled'}`))
+    }
+    if (['enable','disable'].includes(action) && args.length === 1) {
+      const name = args[0]
+      const process = await Process.findOne({ name })
+      if (!process) throw new Error('Process not found.')
+      if (process.kind !== 'snapshot') throw new Error('Scheduled toggles currently support snapshot processes only.')
+      await Process.updateOne({ _id: process._id }, { $set: { enabled: action === 'enable' } })
+      return success(`Snapshot process ${name} ${action}d. Capture is RAM-only and expires as capacity fills.`)
+    }
+    usage('process [list|enable <snapshot-name>|disable <snapshot-name>]')
+  }
+  if (verb === 'event' && action === 'recent' && args.length === 0) {
+    return success(...(services.eventEngine.getState().recentEvents.slice(0, 10).map(event => `${event.at}: ${event.type}`) || []))
+  }
+  if (verb === 'snapshot' && action === 'take' && args.length === 0) {
+    const capture = services.eventEngine.snapshots.capture({
+      type: 'app-market-data', source: { type: 'manual', id: 'cli' },
+      payload: { market: services.marketDataHub.getState(), scanners: await s.details() },
+    })
+    return success(`Temporary snapshot ${capture.id} captured (${capture.bytes} bytes). No database history was written.`)
+  }
+  if (verb === 'snapshot' && action === 'list' && args.length === 0) {
+    const snapshots = services.eventEngine.snapshots.list()
+    return success(...(snapshots.map(item => `${item.capturedAt} ${item.type} ${item.id} (${item.bytes} B)`) || []),
+      `Storage: ${services.eventEngine.snapshots.stats.totalBytes} / ${services.eventEngine.snapshots.stats.maxBytes} bytes`)
+  }
 
   if (verb === 'asset') {
     if (action === 'add') {
@@ -166,7 +242,7 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
     if (action === 'show' || action === 'status') {
       requireArgs(args, 1, `scanner ${action} <name>`)
       const result = await s.status(args[0])
-      return success(`${result.name}: ${result.running ? 'registry active' : 'stopped'}; collections: ${result.collections.join(', ') || 'none'}; active symbols: ${result.symbols.join(', ') || 'none'}; shared registry total: ${result.totalUniqueAssets}. No price scanning yet.`)
+      return success(`${result.name}: ${result.running ? 'registry active' : 'stopped'}; collections: ${result.collections.join(', ') || 'none'}; active symbols: ${result.symbols.join(', ') || 'none'}; shared registry total: ${result.totalUniqueAssets}. Real-time crypto quotes appear when a supported asset has an active feed.`)
     }
     if (action === 'rename') {
       requireArgs(args, 2, 'scanner rename <old> <new>')
@@ -193,7 +269,7 @@ export async function execute(input, services = { catalog, pingDatabase, scanner
     if (action === 'start' || action === 'sync') {
       requireArgs(args, 1, `scanner ${action} <name>`)
       const result = await s[action](args[0])
-      return success(`${result.name}: registry active, ${result.subscriptions} subscription(s), ${result.symbols.length} distinct symbol(s) (${result.symbols.join(', ') || 'none'}). No live price feed yet.`)
+      return success(`${result.name}: registry active, ${result.subscriptions} subscription(s), ${result.symbols.length} distinct symbol(s) (${result.symbols.join(', ') || 'none'}). Supported crypto WebSocket feed is enabled; stock feed requires credentials.`)
     }
     if (action === 'stop' || action === 'kill') {
       requireArgs(args, 1, `scanner ${action} <name>`)

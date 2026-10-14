@@ -1,48 +1,47 @@
 # Trading Ecosystem v1 architecture
 
-## Current foundation
+## Implemented baseline
 
-- **Node.js / Express** is the long-running backend process, bound to localhost port 3001.
-- **MongoDB / Mongoose** persists assets, collections, memberships, scanner definitions, and scanner-to-collection attachments.
-- **`server/commands.js`** is the one validated command handler, used by Express `POST /api/commands`.
-- **`server/cli.js`** is a command client of that API: CLI and browser share the **same in-memory runtime state**.
-- **React / Vite** provides a mobile-friendly CRUD workspace. Dev Vite proxies `/api` to localhost:3001.
-- **`server/workspace.js`** projects read-only dashboard data via `GET /api/state`; no second UI-specific mutation implementation.
-- **ScannerRegistry** stores one asset per symbol with a set of active subscription references. The server process owns it.
-- Node unit, API, and MongoDB integration tests run under GitHub Actions.
+- **Node.js / Express** remains the localhost-only command/API backend.
+- **MongoDB / Mongoose** holds persistent configuration. Asset is the canonical identity; provider-specific markets are embedded and distinct by market symbol and provider/exchange. Memberships store contextual preferences.
+- **Shared command handler** (`server/commands.js`) serves both the CLI and React.
+- **React / Vite** offers a responsive four-tab workspace with an explicitly simulated, no-backend showcase and a true backend mode. GitHub Pages can only show the showcase.
+- **ScannerRegistry** deduplicates symbols across active subscriptions. One backend instance holds shared runtime state.
+- **Processes** can have kinds `scanner`, `discovery`, `snapshot`. Discovery is a schema/foundation only; scanner runtime and opt-in snapshot scheduler exist.
+- **Providers and Exchanges** have configurable database models, with no credentials stored or exposed.
+- **MarketDataHub** manages the public Coinbase ticker WebSocket and keeps most recent quotes in memory. Currently hardcoded supported symbols map to Coinbase USD pairs; true per-membership market routing and stock data adapters are next work.
+- **MarketWindowBuffer** keeps at most one observation per second per active symbol for a rolling five-minute window. No price history in MongoDB.
+- **EventEngine** evaluates configurable EventRules on typed events, including asset/member/process lifecycle, snapshot creation, test triggers, and actual 5%-window momentum crossing. Actions are explicitly whitelisted (`snapshot.capture`, `alert.record`, `collection.add`). A queued EventEmitter bus keeps rule evaluation off the immediate WebSocket callback.
+- **SnapshotManager** captures generic typed envelopes in bounded RAM (2 MB / 120 items, oldest unpinned eviction). Individual snapshots can be exported via the HTTP route and browser download. **Persistent history is off.** Scheduler only runs enabled snapshot processes and reads cached state every configured interval.
 
-## Current scope
+## Entity relationships
 
-- Manually create, list, rename and delete assets/collections/scanners, and manage memberships and subscriptions.
-- Add multiple ticker symbols with comma or whitespace separators.
-- Start, stop, and synchronize scanner registries. No polling, market data, strategy filters, alerts, discovery, orders, or trading.
-- Configurations survive restart, but the active scanner registry does **not**.
+- **Assets**: one canonical symbol. Markets contain `symbol, base, quote, provider, exchange, activityRank`, and verification flag. Names/class and personal annotations are optional.
+- **Collections** group assets.
+- **Memberships** are unique Asset + Collection, with `preferences.provider / exchange / marketSymbol / priority / notes`.
+- **Processes** identify a workload type and runtime configuration.
+- **Subscriptions** associate Process + Collection; the existing scanner registry uses this relationship.
+- **EventRules** reference a target by scope and ID, describe a typed trigger, typed conditions, ordered actions; disabled by default unless specifically enabled.
+- **Snapshots** define the optional future persistence model; runtime snapshots use a generic `type/source/capturedAt/payload` envelope. They are not automatically written to MongoDB.
+- **Events** are runtime messages and a bounded recent activity view; a durable EventLog is future work.
 
-## Logical data model
+## Status boundaries and safeguards
 
-- **Asset:** global symbol identity.
-- **Collection:** a named list of assets.
-- **Membership:** unique Asset + Collection relationship.
-- **Process:** named scanner configuration.
-- **Subscription:** unique Process + Collection relationship.
+- No orders, execution, permanent trading history, auto-discovery, or stock-market consolidated tape feeds.
+- Demo mode never writes to MongoDB. `demo seed` is a separate explicit command for creating sample records, and `demo trigger` emits a marked simulated event.
+- Coinbase updates originate from the public Coinbase exchange and may be unavailable or stale; the UI exposes source and timestamp. IEX or SIP equities feed would require a separate adapter and credentials; premarket is a product priority but is **not working yet**.
+- A real 5% market move rule fires only when the observed rolling window crosses the threshold with >=30 seconds of samples and an additional cooldown. This is a prototype momentum detector, not a finished trading signal.
+- Event rule execution whitelists actions and limits snapshot memory. No arbitrary JS, shell commands, or untrusted expressions.
+- Snapshot persistence and provider secrets never happen implicitly. Cloud exports and on-disk bounded history require a future implementation.
+- The backend listens on `127.0.0.1`, Codespaces forwarded preview must remain **Private**. Static GitHub Pages cannot run the Node backend.
+- GitHub Actions run Node tests with isolated MongoDB and build the React frontend on pull requests.
 
-Deleting a collection removes its memberships and scanner attachments, but does not delete the underlying assets. Deleting an asset removes its memberships. Deleting a scanner removes only its subscriptions, not lists or assets.
+## Next priorities
 
-## Security and hosting
+1. Verify/test shared feed subscriptions and reconnect behavior with real market hours/data.
+2. Build provider-specific routing from persisted Membership preferences, and Alpaca IEX authenticated equities adapter, with clear partial-coverage labels.
+3. Add a UI event-rule creator/editor and permission/recursion guards, not just seed/toggle.
+4. Add throttled discovery processes, provider capability/priority selection and subscription capacity management.
+5. Add bounded optional persisted snapshot history/export, configurable cleanup, and selectively durable event logs.
 
-- The real `server/.env` is ignored by Git; do not commit credentials.
-- MongoDB access happens only server-side.
-- The Express API only listens on `127.0.0.1` and is accessed from the browser through Vite's dev proxy.
-- Keep Codespaces forwarded port 5173 private.
-- GitHub Pages only serves static React; it has **no live backend**. A properly hosted authenticated backend is a separate future deployment decision.
-- HTTP command input is restricted to our command grammar. Never expose a shell or accept arbitrary JavaScript through the command route.
-
-## Later stages (not yet implemented)
-
-1. Provider adapters for stocks and crypto (provider reliability and feed coverage to be selected).
-2. Shared feed and data caching, deduplicated by asset and interval.
-3. Rule evaluation and scanner filters.
-4. More sophisticated lifecycle and monitoring modes.
-5. Discovery, notifications, history, analytics, and eventual portfolio modules.
-
-Keep each stage small and verified end-to-end rather than adding untested infrastructure.
+Keep the scanner's hot path separate from persistence, alert delivery and discovery scheduling.

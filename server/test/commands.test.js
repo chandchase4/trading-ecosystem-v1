@@ -56,7 +56,7 @@ test('collection commands create assets on add, and support rename/delete', asyn
 test('scanner CRUD and lifecycle commands are shared', async () => {
   assert.deepEqual((await execute('scanner create momentum', services)).lines, ['Created scanner momentum.'])
   assert.match((await execute('scanner attach momentum watchlist', services)).lines[0], /Attached watchlist/)
-  assert.match((await execute('scanner start momentum', services)).lines[0], /No live price feed yet/)
+  assert.match((await execute('scanner start momentum', services)).lines[0], /Supported crypto WebSocket feed/)
   assert.match((await execute('scanner status momentum', services)).lines[0], /BTC/)
   assert.deepEqual((await execute('scanner rename momentum renamed', services)).lines, ['Renamed scanner momentum to renamed.'])
   assert.deepEqual((await execute('scanner stop momentum', services)).lines, ['momentum: registry stopped.'])
