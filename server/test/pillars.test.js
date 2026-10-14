@@ -28,6 +28,7 @@ test('Data Manager accepts trusted provider updates and emits events to scanners
   })
   assert.equal(dm.ingest({ symbol: 'BTC', marketSymbol: 'BTC-USD', provider: 'coinbase', price: '100' }), true)
   assert.equal(dm.ingest({ symbol: 'BTC', marketSymbol: 'BTC-USD', provider: 'untrusted', price: '100' }), false)
+  await new Promise(resolve => setImmediate(resolve))
   assert.equal(messages[0][0], 'market.data.received')
   assert.deepEqual(messages[0][2].scannerIds, ['scanner-1'])
   assert.equal(scanned[0].symbol, 'BTC')
