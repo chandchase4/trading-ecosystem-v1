@@ -2,17 +2,18 @@
 
 CLI-first Node.js + MongoDB project with a minimal React/Vite frontend.
 
-## First CLI
+## Run the CLI in Codespaces
 
-In GitHub Codespaces, open a **new terminal** (leave the Express dev server running in its own terminal if you want):
+Open a new terminal:
 
 ```bash
-cd /workspaces/trading-ecosystem-v1/server
+git pull origin main
+cd server
 npm install
 npm run cli
 ```
 
-Available commands inside the CLI:
+Commands:
 
 ```text
 help
@@ -20,30 +21,31 @@ status
 asset add BTC
 asset add TSLA
 asset list
+collection create watchlist
+collection list
+collection add watchlist BTC
+collection show watchlist
+collection remove watchlist BTC
 exit
 ```
 
-- `help` works without a MongoDB connection.
-- `status` checks the MongoDB connection.
-- `asset add` saves an uppercase symbol to MongoDB and avoids duplicates.
-- `asset list` shows saved symbols in alphabetical order.
-- `exit` closes the CLI.
+An asset must exist before adding it to a collection. Names are case-insensitive and use letters, digits, underscores or hyphens without spaces. Assets and collection memberships persist in MongoDB.
 
-You can also run a command directly: `npm run cli -- asset list`.
+Direct one-off commands also work: `npm run cli -- collection show watchlist`.
 
 ## Backend setup
+
+Set `MONGODB_URI` in `server/.env`, copying `server/.env.example` if needed. **Do not overwrite an existing .env or commit it.** Rotate any credentials previously exposed in chat, and grant the Codespace access to your MongoDB Atlas cluster.
 
 ```bash
 cd server
 npm install
-cp .env.example .env
+npm run dev
 ```
 
-Set `MONGODB_URI` in `server/.env` to your MongoDB Atlas connection string with a **new, strong password**. The real `.env` is ignored by Git and must not be committed. If a `.env` already exists, don't overwrite it.
+Express starts on port 3001 after MongoDB connects. No HTTP API routes yet.
 
-Run the Express server separately with `npm run dev`; it listens on port 3001 by default and has no API routes yet.
-
-Dependencies: Express, Mongoose, MongoDB Node.js driver, BSON, and dotenv.
+To run offline automated unit tests (no Atlas credentials required): `npm test`.
 
 ## Frontend (React + Vite)
 
@@ -55,4 +57,4 @@ npm run dev
 
 React remains a bare placeholder. GitHub Pages hosts only the static frontend, not the Node.js server.
 
-No scanning, subscriptions, trading orders, or live market data are implemented yet. See [architecture](docs/ARCHITECTURE.md).
+No live scanning, market prices, orders, or subscriptions yet. See [architecture](docs/ARCHITECTURE.md).
